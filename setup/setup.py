@@ -39,10 +39,11 @@ else:
 with open(f"{REPO_PATH}/config.json", 'r') as f:
     config = json.load(f)
 
-CATALOG = config["catalog"]
-SCHEMA = config["schema"]
-VOLUME = config["volume"]
-TABLE = config["table"]
+# Hardcode config instead of loading from file
+CATALOG = "DevSecOps_Labs"
+SCHEMA = "Agent_Bricks_Lab"
+VOLUME = "meijer_store_transcripts"
+TABLE = "meijer_store_tickets"
 
 # 1. Create UC assets
 print("\n[1/4] Creating Unity Catalog assets...")
