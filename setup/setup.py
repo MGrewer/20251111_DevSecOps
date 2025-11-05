@@ -1,10 +1,5 @@
 #!/usr/bin/env python
-"""
-DevSecOps Demo - One-Click Setup
-- UC-first flow, auto-uses Serverless SQL (Statements API) when Default Storage blocks local CREATE CATALOG.
-- Zero manual inputs: discovers host, token, and a Serverless warehouse automatically.
-- If no Serverless warehouse is found, falls back to the 'workspace' catalog.
-"""
+# DevSecOps Demo - One-Click Setup (serverless-aware, dynamic fallback)
 
 import os, sys, glob, shutil, json, time
 import requests
@@ -15,7 +10,7 @@ print("""
 ╚══════════════════════════════════════════════════════════════╝
 """)
 
-# ---------------- Preflight ----------------
+# ----- Preflight -----
 try:
     spark  # noqa
     dbutils  # noqa
@@ -23,7 +18,7 @@ except NameError:
     print("ERROR  Run this in a Databricks notebook (needs spark + dbutils).")
     sys.exit(1)
 
-# ---------------- Resolve REPO_PATH ----------------
+# ----- REPO_PATH -----
 if "REPO_PATH" not in globals():
     demo_dirs = [d for d in os.listdir("/tmp") if d.startswith("demo_")]
     if demo_dirs:
@@ -34,19 +29,15 @@ if "REPO_PATH" not in globals():
         sys.exit(1)
 print(f"Installing from: {REPO_PATH}")
 
-# ---------------- Config (override via exec globals if desired) ----------------
+# ----- Config -----
 TARGET_CATALOG = globals().get("CATALOG", "DevSecOps_Labs")
 SCHEMA         = globals().get("SCHEMA",  "Agent_Bricks_Lab")
 VOLUME         = globals().get("VOLUME",  "meijer_store_transcripts")
 TABLE          = globals().get("TABLE",   "meijer_store_tickets")
 
-# If Serverless cannot be used and UC catalog creation is blocked, use this
-FALLBACK_EXISTING_CATALOG = globals().get("FALLBACK_EXISTING_CATALOG", "workspace")
+def q(x: str) -> str: return f"`{x}`"
 
-def q(x: str) -> str:
-    return f"`{x}`"
-
-# ---------------- Helpers: host + token + serverless discovery ----------------
+# ----- Helpers: host/token/serverless -----
 def _workspace_host() -> str:
     try:
         ctx = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
@@ -55,14 +46,12 @@ def _workspace_host() -> str:
             host = "https://" + host
         return host.rstrip("/")
     except Exception:
-        h = os.environ.get("DATABRICKS_HOST", "").rstrip("/")
-        return h
+        return os.environ.get("DATABRICKS_HOST", "").rstrip("/")
 
 def _context_token() -> str:
     try:
         ctx = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
-        tok = ctx.apiToken().get()
-        return tok or ""
+        return ctx.apiToken().get() or ""
     except Exception:
         return ""
 
@@ -77,15 +66,14 @@ TOKEN = _context_token() or _pat()
 
 def _api_headers():
     if not HOST or not TOKEN:
-        raise RuntimeError("Missing HOST or API token. Provide a PAT in secret oneclick/pat or DATABRICKS_TOKEN.")
+        raise RuntimeError("Missing HOST or API token. Provide PAT via secret oneclick/pat or DATABRICKS_TOKEN.")
     return {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
 
 def discover_serverless_warehouse_id() -> str | None:
     try:
         r = requests.get(f"{HOST}/api/2.0/sql/warehouses", headers=_api_headers(), timeout=30)
         r.raise_for_status()
-        data = r.json()
-        for w in data.get("warehouses", []):
+        for w in r.json().get("warehouses", []):
             if w.get("is_serverless") or w.get("enable_serverless_compute"):
                 if w.get("state") in (None, "RUNNING", "STOPPED"):
                     return w.get("id")
@@ -94,13 +82,16 @@ def discover_serverless_warehouse_id() -> str | None:
         return None
 
 def run_serverless_sql(sql_text: str, warehouse_id: str, timeout_sec: int = 120) -> None:
+    # IMPORTANT: set context catalog to 'system' to avoid HMS default
     payload = {
         "statement": sql_text,
         "warehouse_id": warehouse_id,
+        "catalog": "system",     # <-- fixes UC_HIVE_METASTORE_DISABLED_EXCEPTION
         "wait_timeout": "5s",
         "on_wait_timeout": "CONTINUE",
     }
-    r = requests.post(f"{HOST}/api/2.0/sql/statements", headers=_api_headers(), data=json.dumps(payload), timeout=30)
+    r = requests.post(f"{HOST}/api/2.0/sql/statements", headers=_api_headers(),
+                      data=json.dumps(payload), timeout=30)
     r.raise_for_status()
     stmt_id = r.json()["statement_id"]
     get_url = f"{HOST}/api/2.0/sql/statements/{stmt_id}"
@@ -116,18 +107,41 @@ def run_serverless_sql(sql_text: str, warehouse_id: str, timeout_sec: int = 120)
             err = out["status"].get("error", {})
             raise RuntimeError(f"Serverless SQL failed: {err.get('message','unknown error')}")
         if time.time() - t0 > timeout_sec:
-            raise TimeoutError(f"Timed out waiting for SQL statement: {sql_text[:80]}...")
+            raise TimeoutError(f"Timed out waiting for SQL: {sql_text[:80]}...")
         time.sleep(2)
 
-# ---------------- Step 1: Ensure catalog ----------------
+def pick_accessible_catalog(preferred: str | None = None) -> str | None:
+    """Return a catalog you can USE. Try preferred first, then iterate SHOW CATALOGS."""
+    try:
+        if preferred:
+            spark.sql(f"USE CATALOG {q(preferred)}")
+            return preferred
+    except Exception:
+        pass
+    try:
+        cats = [r["catalog"] if "catalog" in r else r[0] for r in spark.sql("SHOW CATALOGS").collect()]
+        # Avoid 'system' for data ops; try non-system first, then system as last resort for later USE check
+        ordered = [c for c in cats if c not in ("system",)] + [c for c in cats if c == "system"]
+        for c in ordered:
+            try:
+                spark.sql(f"USE CATALOG {q(c)}")
+                return c
+            except Exception:
+                continue
+    except Exception:
+        return None
+    return None
+
+def _needs_default_storage_fix(e_msg: str) -> bool:
+    return ("Metastore storage root URL does not exist" in e_msg) or ("Default Storage" in e_msg)
+
+# ----- [1/4] Ensure catalog/schema/volume -----
 print("\n[1/4] Creating Unity Catalog assets...")
 
 chosen_catalog = TARGET_CATALOG
 created_on_serverless = False
 
-def _needs_default_storage_fix(e_msg: str) -> bool:
-    return ("Metastore storage root URL does not exist" in e_msg) or ("Default Storage" in e_msg)
-
+# Try local CREATE CATALOG
 try:
     spark.sql(f"CREATE CATALOG IF NOT EXISTS {q(chosen_catalog)}")
     print(f"  OK   Catalog ready: {chosen_catalog} (local)")
@@ -135,26 +149,40 @@ except Exception as e:
     msg = str(e)
     if _needs_default_storage_fix(msg):
         print("  INFO Local CREATE CATALOG blocked by Default Storage policy.")
-        try:
-            wh_id = discover_serverless_warehouse_id()
-            if wh_id:
-                print(f"  INFO Using Serverless warehouse: {wh_id}")
+        wh_id = discover_serverless_warehouse_id()
+        if wh_id:
+            print(f"  INFO Using Serverless warehouse: {wh_id}")
+            try:
                 run_serverless_sql(f"CREATE CATALOG IF NOT EXISTS {q(chosen_catalog)};", wh_id)
                 created_on_serverless = True
                 print(f"  OK   Catalog ready: {chosen_catalog} (serverless)")
-            else:
-                print("  WARN No Serverless SQL warehouse found; falling back to workspace catalog.")
-                chosen_catalog = FALLBACK_EXISTING_CATALOG
-        except Exception as ee:
-            print(f"  WARN Serverless CREATE CATALOG failed: {str(ee)[:220]}")
-            print(f"  INFO Falling back to existing catalog: {FALLBACK_EXISTING_CATALOG}")
-            chosen_catalog = FALLBACK_EXISTING_CATALOG
+            except Exception as ee:
+                print(f"  WARN Serverless CREATE CATALOG failed: {str(ee)[:220]}")
+                # Dynamic fallback
+                fallback = pick_accessible_catalog()
+                if not fallback:
+                    print("ERROR  No accessible catalogs found. Ask an admin to grant access to an existing catalog.")
+                    sys.exit(1)
+                print(f"  INFO Falling back to accessible catalog: {fallback}")
+                chosen_catalog = fallback
+        else:
+            # No serverless available: dynamic fallback
+            fallback = pick_accessible_catalog()
+            if not fallback:
+                print("ERROR  No accessible catalogs found. Ask an admin to grant access to an existing catalog.")
+                sys.exit(1)
+            print(f"  INFO No Serverless found; using accessible catalog: {fallback}")
+            chosen_catalog = fallback
     else:
         print(f"  WARN CREATE CATALOG failed: {msg[:220]}")
-        print(f"  INFO Falling back to existing catalog: {FALLBACK_EXISTING_CATALOG}")
-        chosen_catalog = FALLBACK_EXISTING_CATALOG
+        fallback = pick_accessible_catalog()
+        if not fallback:
+            print("ERROR  No accessible catalogs found. Ask an admin to grant access to an existing catalog.")
+            sys.exit(1)
+        print(f"  INFO Falling back to accessible catalog: {fallback}")
+        chosen_catalog = fallback
 
-# Ensure catalog usable
+# Confirm chosen catalog usable (pick_accessible_catalog already tried, but double-check)
 try:
     spark.sql(f"USE CATALOG {q(chosen_catalog)}")
 except Exception as e:
@@ -177,7 +205,7 @@ except Exception as e:
     print(f"ERROR  CREATE VOLUME failed: {str(e)[:220]}")
     sys.exit(1)
 
-# ---------------- Step 2: Import PDFs ----------------
+# ----- [2/4] Import PDFs -----
 print("\n[2/4] Importing PDFs...")
 pdfs = glob.glob(os.path.join(REPO_PATH, "data", "pdfs", "*.pdf"))
 vol_path = f"/Volumes/{chosen_catalog}/{SCHEMA}/{VOLUME}"
@@ -200,7 +228,7 @@ else:
             print(f"  WARN Failed {name}: {str(e)[:140]}")
     print(f"  OK   Imported {success}/{len(pdfs)} PDF(s). Failed: {failed}")
 
-# ---------------- Step 3: Create table ----------------
+# ----- [3/4] Create table -----
 print("\n[3/4] Creating table from parquet...")
 parquet_glob = os.path.join(REPO_PATH, "data", "table", "*.parquet")
 count = 0
@@ -219,7 +247,7 @@ if df is not None:
     except Exception as e:
         print(f"ERROR  Writing table failed: {str(e)[:200]}")
 
-# ---------------- Step 4: Cleanup ----------------
+# ----- [4/4] Cleanup -----
 print("\n[4/4] Cleaning up temporary files...")
 try:
     if REPO_PATH.startswith("/tmp/demo_") and os.path.isdir(REPO_PATH):
@@ -230,7 +258,6 @@ try:
 except Exception as e:
     print(f"  WARN Cleanup skipped: {str(e)[:160]}")
 
-# ---------------- Summary ----------------
 mode = "serverless+local" if created_on_serverless else "local_only" if chosen_catalog == TARGET_CATALOG else f"fallback:{chosen_catalog}"
 print(f"""
 ╔══════════════════════════════════════════════════════════════╗
