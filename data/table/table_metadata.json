@@ -1,0 +1,11 @@
+{
+  "source_catalog": "users",
+  "source_schema": "mitchell_grewer",
+  "source_table": "meijer_store_tickets",
+  "row_count": 24872,
+  "column_count": 26,
+  "parquet_files": 1,
+  "total_size_mb": 1.281240463256836,
+  "compression": "snappy",
+  "export_timestamp": "2025-11-05 19:56:29"
+}

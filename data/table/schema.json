@@ -1,0 +1,132 @@
+[
+  {
+    "name": "ticket_id",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "status",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "priority",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "source",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "issue_category",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "issue_subcategory",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "issue_description",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "unit_id",
+    "type": "IntegerType()",
+    "nullable": true
+  },
+  {
+    "name": "store_name",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "lat",
+    "type": "DoubleType()",
+    "nullable": true
+  },
+  {
+    "name": "lon",
+    "type": "DoubleType()",
+    "nullable": true
+  },
+  {
+    "name": "type",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "caller_name",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "caller_role",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "support_department",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "vendor_involved",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "created_time",
+    "type": "TimestampType()",
+    "nullable": true
+  },
+  {
+    "name": "close_time",
+    "type": "TimestampType()",
+    "nullable": true
+  },
+  {
+    "name": "operational_cost",
+    "type": "DoubleType()",
+    "nullable": true
+  },
+  {
+    "name": "call_sentiment_score",
+    "type": "DoubleType()",
+    "nullable": true
+  },
+  {
+    "name": "csat_score",
+    "type": "DoubleType()",
+    "nullable": true
+  },
+  {
+    "name": "first_time_resolution",
+    "type": "BooleanType()",
+    "nullable": true
+  },
+  {
+    "name": "agent_experience_level",
+    "type": "IntegerType()",
+    "nullable": true
+  },
+  {
+    "name": "hold_time_seconds",
+    "type": "IntegerType()",
+    "nullable": true
+  },
+  {
+    "name": "transfer_count",
+    "type": "IntegerType()",
+    "nullable": true
+  },
+  {
+    "name": "escalated",
+    "type": "BooleanType()",
+    "nullable": true
+  }
+]
