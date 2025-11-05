@@ -1,42 +1,26 @@
 #!/usr/bin/env python
 """
-DevSecOps Demo - One-Click Setup (No Repos Required)
-This script auto-downloads from GitHub and installs everything
+DevSecOps Demo - One-Click Setup
 """
 
-import os, sys, time, glob, subprocess, shutil
+import os, sys, time, glob
 
 print("""
 ╔══════════════════════════════════════════════════════════════╗
-║         DevSecOps Demo - Installing...                      ║
+║         DevSecOps Demo - Installing...                       ║
 ╚══════════════════════════════════════════════════════════════╝
 """)
 
-# Determine where we're running from
-# This handles being run from any cloned location
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if "/setup" in current_dir:
-    # We're in the setup directory, go up one level
-    REPO_PATH = os.path.dirname(current_dir)
-else:
-    # We're at repo root or somewhere else
-    REPO_PATH = current_dir
-
-# Check if data exists where we expect it
-if not os.path.exists(f"{REPO_PATH}/data"):
-    # Need to clone from GitHub
-    print("📥 Downloading from GitHub...")
-    REPO_PATH = f"/tmp/devSecops_{int(time.time())}"  # Unique path each time
-    
-    try:
-        subprocess.run([
-            "git", "clone", "--depth", "1",
-            "https://github.com/MGrewer/20251111_DevSecOps", 
-            REPO_PATH
-        ], check=True, capture_output=True)
-        print("✓ Downloaded files")
-    except Exception as e:
-        print(f"❌ Download failed: {e}")
+# REPO_PATH is passed from the one-liner
+# If not passed, try to find it
+if 'REPO_PATH' not in globals():
+    # Fallback - find the most recent demo directory
+    demo_dirs = [d for d in os.listdir("/tmp") if d.startswith("demo_")]
+    if demo_dirs:
+        demo_dirs.sort(key=lambda x: os.path.getmtime(f"/tmp/{x}"), reverse=True)
+        REPO_PATH = f"/tmp/{demo_dirs[0]}"
+    else:
+        print("❌ Cannot find repository")
         sys.exit(1)
 
 print(f"Installing from: {REPO_PATH}")
