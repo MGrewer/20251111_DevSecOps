@@ -1,301 +1,241 @@
 #!/usr/bin/env python
-# DevSecOps Demo - One-Click Setup (serverless-aware, dynamic fallback)
+"""
+DevSecOps Demo - Setup with Databricks Git Folder Creation
+Following Databricks API best practices
+"""
 
-import os, sys, glob, shutil, json, time
-import requests
+import os, shutil, glob, json, requests, time
 
 print("""
 ╔══════════════════════════════════════════════════════════════╗
-║                DevSecOps Demo - Installing...                ║
+║         DevSecOps Demo - Installing...                       ║
 ╚══════════════════════════════════════════════════════════════╝
 """)
 
-# ----- Preflight -----
-try:
-    spark  # noqa
-    dbutils  # noqa
-except NameError:
-    print("ERROR  Run this in a Databricks notebook (needs spark + dbutils).")
-    sys.exit(1)
+# Configuration
+CATALOG = "DevSecOps_Labs"
+SCHEMA = "Agent_Bricks_Lab"
+VOLUME = "meijer_store_transcripts"
+TABLE = "meijer_store_tickets"
+GITHUB_URL = "https://github.com/MGrewer/20251111_DevSecOps"
 
-# ----- REPO_PATH -----
-if "REPO_PATH" not in globals():
-    demo_dirs = [d for d in os.listdir("/tmp") if d.startswith("demo_")]
-    if demo_dirs:
-        demo_dirs.sort(key=lambda x: os.path.getmtime(f"/tmp/{x}"), reverse=True)
-        REPO_PATH = f"/tmp/{demo_dirs[0]}"
-    else:
-        print("ERROR  Cannot determine REPO_PATH. Pass it in the exec namespace.")
-        sys.exit(1)
-print(f"Installing from: {REPO_PATH}")
-
-# ----- Config -----
-TARGET_CATALOG = globals().get("CATALOG", "DevSecOps_Labs")
-SCHEMA         = globals().get("SCHEMA",  "Agent_Bricks_Lab")
-VOLUME         = globals().get("VOLUME",  "meijer_store_transcripts")
-TABLE          = globals().get("TABLE",   "meijer_store_tickets")
-
-def q(x: str) -> str: return f"`{x}`"
-
-# ----- Helpers: host/token/serverless -----
-def _workspace_host() -> str:
+# Get Databricks workspace context
+def get_databricks_context():
+    """Get host and token from notebook context"""
     try:
         ctx = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
         host = ctx.browserHostName().get()
         if not host.startswith("https://"):
             host = "https://" + host
-        return host.rstrip("/")
-    except Exception:
-        return os.environ.get("DATABRICKS_HOST", "").rstrip("/")
+        token = ctx.apiToken().get()
+        return host.rstrip("/"), token
+    except:
+        # Fallback to environment variables
+        import os
+        host = os.environ.get("DATABRICKS_HOST", "").rstrip("/")
+        token = os.environ.get("DATABRICKS_TOKEN", "")
+        return host, token
 
-def _context_token() -> str:
-    try:
-        ctx = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
-        return ctx.apiToken().get() or ""
-    except Exception:
-        return ""
-
-def _pat() -> str:
-    try:
-        return dbutils.secrets.get("oneclick", "pat")
-    except Exception:
-        return os.environ.get("DATABRICKS_TOKEN", "")
-
-HOST = _workspace_host()
-TOKEN = _context_token() or _pat()
-
-def _api_headers():
-    if not HOST or not TOKEN:
-        raise RuntimeError("Missing HOST or API token. Provide PAT via secret oneclick/pat or DATABRICKS_TOKEN.")
-    return {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
-
-def discover_serverless_warehouse_id() -> str | None:
-    try:
-        r = requests.get(f"{HOST}/api/2.0/sql/warehouses", headers=_api_headers(), timeout=30)
-        r.raise_for_status()
-        for w in r.json().get("warehouses", []):
-            if w.get("is_serverless") or w.get("enable_serverless_compute"):
-                if w.get("state") in (None, "RUNNING", "STOPPED"):
-                    return w.get("id")
+def create_git_folder(repo_url):
+    """Create a Git folder following Databricks recommendations"""
+    
+    host, token = get_databricks_context()
+    
+    if not host or not token:
+        print("  ⚠️ Missing DATABRICKS_HOST or DATABRICKS_TOKEN")
         return None
-    except Exception:
-        return None
-
-def run_serverless_sql(sql_text: str, warehouse_id: str, timeout_sec: int = 120) -> None:
-    # IMPORTANT: set context catalog to 'system' to avoid HMS default
-    payload = {
-        "statement": sql_text,
-        "warehouse_id": warehouse_id,
-        "catalog": "system",     # <-- fixes UC_HIVE_METASTORE_DISABLED_EXCEPTION
-        "wait_timeout": "5s",
-        "on_wait_timeout": "CONTINUE",
+    
+    # Get current user
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
     }
-    r = requests.post(f"{HOST}/api/2.0/sql/statements", headers=_api_headers(),
-                      data=json.dumps(payload), timeout=30)
-    r.raise_for_status()
-    stmt_id = r.json()["statement_id"]
-    get_url = f"{HOST}/api/2.0/sql/statements/{stmt_id}"
-    t0 = time.time()
-    while True:
-        g = requests.get(get_url, headers=_api_headers(), timeout=30)
-        g.raise_for_status()
-        out = g.json()
-        s = out["status"]["state"]
-        if s in ("FINISHED", "CANCELED"):
-            return
-        if s in ("FAILED", "ERROR"):
-            err = out["status"].get("error", {})
-            raise RuntimeError(f"Serverless SQL failed: {err.get('message','unknown error')}")
-        if time.time() - t0 > timeout_sec:
-            raise TimeoutError(f"Timed out waiting for SQL: {sql_text[:80]}...")
-        time.sleep(2)
-
-def pick_accessible_catalog(preferred: str | None = None) -> str | None:
-    """Return a catalog you can USE. Try preferred first, then iterate SHOW CATALOGS."""
-    try:
-        if preferred:
-            spark.sql(f"USE CATALOG {q(preferred)}")
-            return preferred
-    except Exception:
-        pass
-    try:
-        cats = [r["catalog"] if "catalog" in r else r[0] for r in spark.sql("SHOW CATALOGS").collect()]
-        # Avoid 'system' for data ops; try non-system first, then system as last resort for later USE check
-        ordered = [c for c in cats if c not in ("system",)] + [c for c in cats if c == "system"]
-        for c in ordered:
-            try:
-                spark.sql(f"USE CATALOG {q(c)}")
-                return c
-            except Exception:
-                continue
-    except Exception:
+    
+    user_resp = requests.get(f"{host}/api/2.0/preview/scim/v2/Me", headers=headers)
+    if user_resp.status_code != 200:
+        print("  ⚠️ Cannot determine current user")
         return None
-    return None
-
-def _needs_default_storage_fix(e_msg: str) -> bool:
-    return ("Metastore storage root URL does not exist" in e_msg) or ("Default Storage" in e_msg)
-
-# ----- [1/4] Ensure catalog/schema/volume -----
-print("\n[1/4] Creating Unity Catalog assets...")
-
-chosen_catalog = TARGET_CATALOG
-created_on_serverless = False
-
-# Try local CREATE CATALOG
-try:
-    spark.sql(f"CREATE CATALOG IF NOT EXISTS {q(chosen_catalog)}")
-    print(f"  OK   Catalog ready: {chosen_catalog} (local)")
-except Exception as e:
-    msg = str(e)
-    if _needs_default_storage_fix(msg):
-        print("  INFO Local CREATE CATALOG blocked by Default Storage policy.")
-        wh_id = discover_serverless_warehouse_id()
-        if wh_id:
-            print(f"  INFO Using Serverless warehouse: {wh_id}")
-            try:
-                run_serverless_sql(f"CREATE CATALOG IF NOT EXISTS {q(chosen_catalog)};", wh_id)
-                created_on_serverless = True
-                print(f"  OK   Catalog ready: {chosen_catalog} (serverless)")
-            except Exception as ee:
-                print(f"  WARN Serverless CREATE CATALOG failed: {str(ee)[:220]}")
-                # Dynamic fallback
-                fallback = pick_accessible_catalog()
-                if not fallback:
-                    print("ERROR  No accessible catalogs found. Ask an admin to grant access to an existing catalog.")
-                    sys.exit(1)
-                print(f"  INFO Falling back to accessible catalog: {fallback}")
-                chosen_catalog = fallback
+    
+    user_email = user_resp.json().get("userName", "unknown")
+    repo_name = repo_url.split("/")[-1].replace(".git", "")
+    repo_path = f"/Workspace/Users/{user_email}/projects/{repo_name}"
+    
+    # Check if repo already exists
+    list_resp = requests.get(
+        f"{host}/api/2.0/repos",
+        headers=headers,
+        params={"path_prefix": f"/Repos/{user_email}"}
+    )
+    
+    if list_resp.status_code == 200:
+        existing = list_resp.json().get("repos", [])
+        for repo in existing:
+            if repo_name in repo.get("path", ""):
+                repo_id = repo.get("id")
+                print(f"  ℹ️ Git folder exists: {repo.get('path')}")
+                
+                # Update to latest on main branch
+                update_resp = requests.patch(
+                    f"{host}/api/2.0/repos/{repo_id}",
+                    headers=headers,
+                    json={"branch": "main"}
+                )
+                if update_resp.status_code == 200:
+                    print(f"  ✓ Updated to latest main branch")
+                
+                return repo.get("path")
+    
+    # Create new Git folder
+    payload = {
+        "url": repo_url,
+        "provider": "gitHub",  # Note: capital H as per Databricks docs
+        "path": repo_path
+    }
+    
+    create_resp = requests.post(
+        f"{host}/api/2.0/repos",
+        headers=headers,
+        json=payload
+    )
+    
+    if create_resp.status_code in (200, 201):
+        result = create_resp.json()
+        print(f"  ✓ Created Git folder: {result.get('path')}")
+        return result.get('path')
+    else:
+        # Try alternate path if projects folder doesn't exist
+        alt_path = f"/Repos/{user_email}/{repo_name}"
+        payload["path"] = alt_path
+        
+        alt_resp = requests.post(
+            f"{host}/api/2.0/repos",
+            headers=headers,
+            json=payload
+        )
+        
+        if alt_resp.status_code in (200, 201):
+            result = alt_resp.json()
+            print(f"  ✓ Created Git folder: {result.get('path')}")
+            return result.get('path')
         else:
-            # No serverless available: dynamic fallback
-            fallback = pick_accessible_catalog()
-            if not fallback:
-                print("ERROR  No accessible catalogs found. Ask an admin to grant access to an existing catalog.")
-                sys.exit(1)
-            print(f"  INFO No Serverless found; using accessible catalog: {fallback}")
-            chosen_catalog = fallback
-    else:
-        print(f"  WARN CREATE CATALOG failed: {msg[:220]}")
-        fallback = pick_accessible_catalog()
-        if not fallback:
-            print("ERROR  No accessible catalogs found. Ask an admin to grant access to an existing catalog.")
-            sys.exit(1)
-        print(f"  INFO Falling back to accessible catalog: {fallback}")
-        chosen_catalog = fallback
+            print(f"  ⚠️ Could not create Git folder: {alt_resp.text[:100]}")
+            return None
 
-# Confirm chosen catalog usable (pick_accessible_catalog already tried, but double-check)
+# Main setup
+print("\n[1/5] Creating Databricks Git folder...")
+git_folder_path = create_git_folder(GITHUB_URL)
+
+# Also clone to /tmp for immediate use (in case Git folder has sync issues)
+print("\n[2/5] Cloning for immediate setup...")
+temp_path = f"/tmp/demo_{int(time.time())}"
+import subprocess
 try:
-    spark.sql(f"USE CATALOG {q(chosen_catalog)}")
-except Exception as e:
-    print(f"ERROR  USE CATALOG {chosen_catalog} failed: {str(e)[:220]}")
-    sys.exit(1)
+    subprocess.run(["git", "clone", GITHUB_URL, temp_path], check=True, capture_output=True)
+    print(f"  ✓ Cloned to: {temp_path}")
+except:
+    print(f"  ⚠️ Clone failed, will try to use Git folder")
 
-# Create schema
-try:
-    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {q(chosen_catalog)}.{q(SCHEMA)}")
-    print(f"  OK   Schema ready: {chosen_catalog}.{SCHEMA}")
-except Exception as e:
-    print(f"ERROR  CREATE SCHEMA failed: {str(e)[:220]}")
-    sys.exit(1)
-
-# Create volume
-try:
-    spark.sql(f"CREATE VOLUME IF NOT EXISTS {q(chosen_catalog)}.{q(SCHEMA)}.{q(VOLUME)}")
-    print(f"  OK   Volume ready: {chosen_catalog}.{SCHEMA}.{VOLUME}")
-except Exception as e:
-    print(f"ERROR  CREATE VOLUME failed: {str(e)[:220]}")
-    sys.exit(1)
-
-# ----- [2/4] Import PDFs -----
-print("\n[2/4] Importing PDFs...")
-pdfs = glob.glob(os.path.join(REPO_PATH, "data", "pdfs", "*.pdf"))
-vol_path = f"/Volumes/{chosen_catalog}/{SCHEMA}/{VOLUME}"
-success = 0
-failed = 0
-
-if not pdfs:
-    print(f"  WARN No PDFs found at {REPO_PATH}/data/pdfs/")
+# Determine which path to use for data
+if git_folder_path and os.path.exists(f"{git_folder_path}/data"):
+    REPO_PATH = git_folder_path
+    print(f"  Using Git folder: {REPO_PATH}")
+elif os.path.exists(temp_path):
+    REPO_PATH = temp_path
+    print(f"  Using temp clone: {REPO_PATH}")
 else:
-    print(f"  Copying {len(pdfs)} PDF(s) to {vol_path}")
-    for i, pdf in enumerate(pdfs, start=1):
-        name = os.path.basename(pdf)
+    print("  ❌ No data source available")
+    exit(1)
+
+# Create UC assets
+print("\n[3/5] Creating Unity Catalog assets...")
+try:
+    spark.sql(f"CREATE CATALOG IF NOT EXISTS `{CATALOG}`")
+    print(f"  ✓ Catalog: {CATALOG}")
+except:
+    print(f"  ℹ️ Using existing: {CATALOG}")
+
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{CATALOG}`.`{SCHEMA}`")
+print(f"  ✓ Schema: {SCHEMA}")
+
+spark.sql(f"CREATE VOLUME IF NOT EXISTS `{CATALOG}`.`{SCHEMA}`.`{VOLUME}`")
+print(f"  ✓ Volume: {VOLUME}")
+
+# Copy PDFs using simple Python file operations
+print("\n[4/5] Importing PDFs...")
+src_dir = f"{REPO_PATH}/data/pdfs"
+dst_dir = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}"
+success = 0
+
+if os.path.exists(src_dir):
+    pdf_files = [f for f in os.listdir(src_dir) if f.endswith('.pdf')]
+    print(f"  Found {len(pdf_files)} PDFs")
+    
+    for i, pdf in enumerate(pdf_files):
         try:
-            # Read PDF with Python (avoids file: protocol)
-            with open(pdf, 'rb') as f:
-                pdf_content = f.read()
-            
-            # Write directly to Volume using dbutils.fs.put
-            dbutils.fs.put(f"{vol_path}/{name}", pdf_content, overwrite=True)
-            
+            shutil.copy(f"{src_dir}/{pdf}", f"{dst_dir}/{pdf}")
             success += 1
-            if i % 50 == 0:
-                print(f"  ... {i}/{len(pdfs)}")
+            if (success % 50) == 0:
+                print(f"  Copied {success} files...")
         except Exception as e:
-            failed += 1
-            if failed <= 5:  # Show first 5 errors only
-                print(f"  WARN Failed {name}: {str(e)[:140]}")
-    print(f"  OK   Imported {success}/{len(pdfs)} PDF(s). Failed: {failed}")
+            pass
+    
+    print(f"  ✓ Imported {success}/{len(pdf_files)} PDFs")
+else:
+    print(f"  ⚠️ No PDFs found at {src_dir}")
 
-# ----- [3/4] Create table -----
-print("\n[3/4] Creating table from parquet...")
-parquet_path = os.path.join(REPO_PATH, "data", "table")
-count = 0
-
+# Create table using Volume staging
+print("\n[5/5] Creating Delta table...")
 try:
-    # Create temp DBFS path
-    temp_dbfs = f"dbfs:/tmp/parquet_staging_{int(time.time())}"
-    dbutils.fs.mkdirs(temp_dbfs)
+    # Stage parquet files through Volume
+    parquet_staging = f"{dst_dir}/.parquet_temp"
+    os.makedirs(parquet_staging, exist_ok=True)
     
-    # Copy parquet files to DBFS
-    for pq_file in glob.glob(os.path.join(parquet_path, "*.parquet")):
-        with open(pq_file, 'rb') as f:
-            content = f.read()
-        filename = os.path.basename(pq_file)
-        dbutils.fs.put(f"{temp_dbfs}/{filename}", content, overwrite=True)
-    
-    # Read from DBFS
-    df = spark.read.parquet(temp_dbfs)
-    
-    # Clean up temp files
-    dbutils.fs.rm(temp_dbfs, recurse=True)
-    
-except Exception as e:
-    print(f"ERROR  Could not read parquet: {str(e)[:200]}")
-    df = None
-
-if df is not None:
-    full_table = f"{q(chosen_catalog)}.{q(SCHEMA)}.{q(TABLE)}"
-    try:
-        df.write.mode("overwrite").saveAsTable(full_table)
-        count = spark.table(full_table).count()
-        print(f"  OK   Table {full_table} with {count:,} rows")
-    except Exception as e:
-        print(f"ERROR  Writing table failed: {str(e)[:200]}")
-
-# ----- [4/4] Cleanup -----
-print("\n[4/4] Cleaning up temporary files...")
-try:
-    if REPO_PATH.startswith("/tmp/demo_") and os.path.isdir(REPO_PATH):
-        shutil.rmtree(REPO_PATH)
-        print("  OK   Temporary checkout removed")
+    parquet_files = glob.glob(f"{REPO_PATH}/data/table/*.parquet")
+    if parquet_files:
+        for pq in parquet_files:
+            shutil.copy(pq, parquet_staging)
+        
+        # Read from Volume path (avoids file:// protocol issues)
+        df = spark.read.parquet(f"{parquet_staging}/*.parquet")
+        df.write.mode("overwrite").saveAsTable(f"`{CATALOG}`.`{SCHEMA}`.`{TABLE}`")
+        
+        # Clean up staging
+        shutil.rmtree(parquet_staging, ignore_errors=True)
+        
+        count = spark.table(f"`{CATALOG}`.`{SCHEMA}`.`{TABLE}`").count()
+        print(f"  ✓ Table created: {count:,} rows")
     else:
-        print("  INFO Skip cleanup: non-temporary path")
+        print(f"  ⚠️ No parquet files found")
+        count = 0
 except Exception as e:
-    print(f"  WARN Cleanup skipped: {str(e)[:160]}")
+    print(f"  ❌ Table failed: {str(e)[:100]}")
+    count = 0
 
-mode = "serverless+local" if created_on_serverless else "local_only" if chosen_catalog == TARGET_CATALOG else f"fallback:{chosen_catalog}"
+# Clean up temp if used
+if REPO_PATH == temp_path and temp_path.startswith("/tmp/"):
+    try:
+        shutil.rmtree(temp_path)
+        print("\n  ✓ Cleaned up temp files")
+    except:
+        pass
+
 print(f"""
 ╔══════════════════════════════════════════════════════════════╗
-║                        Setup Complete                        ║
+║                    ✅ Setup Complete!                        ║
 ╚══════════════════════════════════════════════════════════════╝
-Mode     {mode}
-Catalog  {chosen_catalog}
-Schema   {SCHEMA}
-Volume   {VOLUME}  (imported {success}{f", {failed} failed" if failed else ""})
-Table    {TABLE}   ({count:,} rows)
 
-Try
-  SELECT * FROM {chosen_catalog}.{SCHEMA}.{TABLE} LIMIT 10;
+📦 Created:
+  • {CATALOG}.{SCHEMA}.{VOLUME} ({success} PDFs)
+  • {CATALOG}.{SCHEMA}.{TABLE} ({count:,} rows)
+  {"• " + git_folder_path if git_folder_path else ""}
 
-PDFs
-  /Volumes/{chosen_catalog}/{SCHEMA}/{VOLUME}/
+📝 Try:
+  SELECT * FROM {CATALOG}.{SCHEMA}.{TABLE} LIMIT 10;
+
+📂 Resources:
+  PDFs: /Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/
+  {"Git: " + git_folder_path if git_folder_path else ""}
+  
+💡 To update the Git folder later:
+  Go to Repos > {git_folder_path if git_folder_path else 'your repo'} > Pull
 """)
