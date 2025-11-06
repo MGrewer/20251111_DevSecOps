@@ -219,21 +219,45 @@ else:
     for i, pdf in enumerate(pdfs, start=1):
         name = os.path.basename(pdf)
         try:
-            dbutils.fs.cp(f"file:{pdf}", f"{vol_path}/{name}", recurse=False)
+            # Read PDF with Python (avoids file: protocol)
+            with open(pdf, 'rb') as f:
+                pdf_content = f.read()
+            
+            # Write directly to Volume using dbutils.fs.put
+            dbutils.fs.put(f"{vol_path}/{name}", pdf_content, overwrite=True)
+            
             success += 1
             if i % 50 == 0:
                 print(f"  ... {i}/{len(pdfs)}")
         except Exception as e:
             failed += 1
-            print(f"  WARN Failed {name}: {str(e)[:140]}")
+            if failed <= 5:  # Show first 5 errors only
+                print(f"  WARN Failed {name}: {str(e)[:140]}")
     print(f"  OK   Imported {success}/{len(pdfs)} PDF(s). Failed: {failed}")
 
 # ----- [3/4] Create table -----
 print("\n[3/4] Creating table from parquet...")
-parquet_glob = os.path.join(REPO_PATH, "data", "table", "*.parquet")
+parquet_path = os.path.join(REPO_PATH, "data", "table")
 count = 0
+
 try:
-    df = spark.read.parquet(f"file:{parquet_glob}")
+    # Create temp DBFS path
+    temp_dbfs = f"dbfs:/tmp/parquet_staging_{int(time.time())}"
+    dbutils.fs.mkdirs(temp_dbfs)
+    
+    # Copy parquet files to DBFS
+    for pq_file in glob.glob(os.path.join(parquet_path, "*.parquet")):
+        with open(pq_file, 'rb') as f:
+            content = f.read()
+        filename = os.path.basename(pq_file)
+        dbutils.fs.put(f"{temp_dbfs}/{filename}", content, overwrite=True)
+    
+    # Read from DBFS
+    df = spark.read.parquet(temp_dbfs)
+    
+    # Clean up temp files
+    dbutils.fs.rm(temp_dbfs, recurse=True)
+    
 except Exception as e:
     print(f"ERROR  Could not read parquet: {str(e)[:200]}")
     df = None
