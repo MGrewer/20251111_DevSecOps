@@ -1,104 +1,212 @@
 # DevSecOps Databricks Lab Materials
 
-## 🚀 One-Line Installation
+## Quick Start
 
-Just copy and paste this into any Databricks notebook:
+Execute this command in any Databricks notebook:
 
 ```python
 import subprocess; subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", "/tmp/demo"], check=True); exec(open("/tmp/demo/setup.py").read())
 ```
 
-**That's it!** No Repos setup needed. The script will:
-1. Download everything from GitHub
-2. Create Unity Catalog assets
-3. Import 400+ PDFs
-4. Create Delta table with 24,000+ rows
-5. Clean up temp files
+Installation completes in approximately 3-4 minutes with no additional configuration required.
 
-Total time: ~2-3 minutes
+## Overview
 
-## 📦 What Gets Created
+This repository provides a comprehensive dataset and lab environment for DevSecOps training and development in Databricks. The installation creates a complete Unity Catalog structure with sample data, enabling immediate hands-on practice with realistic retail datasets.
 
-- `DevSecOps_Labs` - Catalog
-- `DevSecOps_Demo` - Schema  
-- `demo_pdfs` - Volume with PDFs
-- `meijer_store_tickets` - Delta table
+## Architecture
 
-## 📝 After Installation
+### Catalog Structure
+
+The installation creates a single Unity Catalog with two schemas:
+
+```
+devsecops_labs/
+├── agent_bricks_lab/
+│   ├── Volumes:
+│   │   ├── meijer_store_transcripts/
+│   │   └── raw_data/
+│   └── Tables:
+│       ├── meijer_store_tickets
+│       ├── competitor_pricing
+│       ├── products
+│       ├── sales
+│       └── stores
+│
+└── demand_sensing/
+    ├── Volume:
+    │   └── data/
+    └── Tables:
+        ├── competitor_pricing
+        ├── products
+        ├── sales
+        └── stores
+```
+
+### Data Contents
+
+#### Agent Bricks Lab (`agent_bricks_lab`)
+- **meijer_store_tickets**: Support ticket data with AI-generated transcripts
+- **PDF transcripts**: Customer service call documentation
+- **Raw data tables**: Products, sales, stores, and competitor pricing
+
+#### Demand Sensing Lab (`demand_sensing`)
+- **Analytical tables**: Products, sales, stores, and competitor pricing
+- **Raw data files**: Source CSV/Parquet files in volume
+
+## Installation Details
+
+The setup script performs the following operations:
+
+1. Creates Unity Catalog: `devsecops_labs`
+2. Creates schemas: `agent_bricks_lab` and `demand_sensing`
+3. Creates volumes for data storage
+4. Imports PDF transcripts
+5. Loads raw data files
+6. Creates Delta tables from source data
+7. Validates installation
+
+## Usage Examples
+
+### Basic Queries
 
 ```sql
--- View your data
-SELECT * FROM DevSecOps_Labs.DevSecOps_Demo.meijer_store_tickets LIMIT 10;
+-- Set catalog and schema
+USE CATALOG devsecops_labs;
+USE SCHEMA agent_bricks_lab;
 
--- Count records
-SELECT COUNT(*) FROM DevSecOps_Labs.DevSecOps_Demo.meijer_store_tickets;
+-- Query main table
+SELECT * FROM meijer_store_tickets LIMIT 10;
+
+-- Analyze product data
+SELECT category, COUNT(*) as product_count
+FROM products
+GROUP BY category;
 ```
+
+### Using SQL Variables
+
+```sql
+DECLARE VARIABLE catalog_name STRING DEFAULT 'devsecops_labs';
+DECLARE VARIABLE schema_name STRING DEFAULT 'demand_sensing';
+
+USE CATALOG IDENTIFIER(catalog_name);
+USE SCHEMA IDENTIFIER(schema_name);
+
+SELECT COUNT(*) FROM products;
+```
+
+### Cross-Schema Analysis
+
+```sql
+SELECT 
+    a.product_id,
+    a.product_name,
+    b.total_sales
+FROM devsecops_labs.agent_bricks_lab.products a
+JOIN devsecops_labs.demand_sensing.sales b
+    ON a.product_id = b.product_id;
+```
+
+### Accessing Volume Data
 
 ```python
-# List PDFs
-dbutils.fs.ls("/Volumes/DevSecOps_Labs/DevSecOps_Demo/demo_pdfs")
+# List PDF files
+dbutils.fs.ls("/Volumes/devsecops_labs/agent_bricks_lab/meijer_store_transcripts")
 
-# Count PDFs
-pdf_count = len(dbutils.fs.ls("/Volumes/DevSecOps_Labs/DevSecOps_Demo/demo_pdfs"))
-print(f"Found {pdf_count} PDFs")
+# Access raw data
+dbutils.fs.ls("/Volumes/devsecops_labs/demand_sensing/data")
+
+# Count files
+pdf_count = len(dbutils.fs.ls("/Volumes/devsecops_labs/agent_bricks_lab/meijer_store_transcripts"))
+print(f"Total PDFs: {pdf_count}")
 ```
 
-## 🔄 Alternative Installation Methods
+## Requirements
 
-If git isn't available, use wget/curl:
+- Databricks workspace with Unity Catalog enabled
+- CREATE CATALOG permissions (or pre-existing `devsecops_labs` catalog)
+- Network access to GitHub
+- Approximately 500MB available storage
+
+## Alternative Installation Methods
+
+### Using requests library
+
 ```python
 import requests
 exec(requests.get("https://raw.githubusercontent.com/MGrewer/20251111_DevSecOps/main/setup.py").text)
 ```
 
-Or with more error handling:
+### With error handling
+
 ```python
 import subprocess
 try:
     subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", "/tmp/demo"], check=True)
     exec(open("/tmp/demo/setup.py").read())
-except:
-    print("Failed to clone. Check network connectivity.")
+except Exception as e:
+    print(f"Installation failed: {e}")
 ```
 
-## 🔧 Requirements
+## Uninstallation
 
-- Databricks workspace with Unity Catalog enabled
-- CREATE SCHEMA permissions (or have `DevSecOps_Labs` catalog pre-created)
-- Network access to GitHub (public repo)
+### Remove Individual Schema
 
-## 🧹 Uninstall
-
-Remove everything with these commands:
 ```sql
--- Remove table
-DROP TABLE IF EXISTS DevSecOps_Labs.DevSecOps_Demo.meijer_store_tickets;
+-- Remove agent_bricks_lab
+DROP SCHEMA IF EXISTS devsecops_labs.agent_bricks_lab CASCADE;
 
--- Remove volume (this deletes all PDFs)
-DROP VOLUME IF EXISTS DevSecOps_Labs.DevSecOps_Demo.demo_pdfs;
-
--- Remove schema
-DROP SCHEMA IF EXISTS DevSecOps_Labs.DevSecOps_Demo CASCADE;
-
--- Remove catalog (only if empty and you created it)
-DROP CATALOG IF EXISTS DevSecOps_Labs;
+-- Remove demand_sensing
+DROP SCHEMA IF EXISTS devsecops_labs.demand_sensing CASCADE;
 ```
 
-## 📂 Repository Structure
+### Complete Removal
+
+```sql
+-- Remove entire catalog and all contents
+DROP CATALOG IF EXISTS devsecops_labs CASCADE;
+```
+
+## Repository Structure
 
 ```
 20251111_DevSecOps/
+├── setup.py           # Installation script
+├── README.md          # This file
 ├── data/
-│   ├── pdfs/         # 400+ PDF documents
-│   └── table/        # Parquet files
-├── setup.py          # One-click installer
-├── config.json       # Configuration
-└── README.md         # This file
+│   ├── pdfs/         # PDF transcripts
+│   ├── table/        # Parquet files
+│   └── raw/          # Raw data files
+└── notebooks/        # Sample analysis notebooks
 ```
 
-## 🤝 Support
+## Verification
 
-Issues? Open a GitHub issue at: https://github.com/MGrewer/20251111_DevSecOps/issues
+After installation, verify the setup:
+
+```python
+# Check schemas
+spark.sql("SHOW SCHEMAS IN devsecops_labs").show()
+
+# Verify tables in agent_bricks_lab
+spark.sql("SHOW TABLES IN devsecops_labs.agent_bricks_lab").show()
+
+# Verify tables in demand_sensing
+spark.sql("SHOW TABLES IN devsecops_labs.demand_sensing").show()
+
+# Check row counts
+spark.sql("SELECT COUNT(*) FROM devsecops_labs.agent_bricks_lab.meijer_store_tickets").show()
+```
+
+## Support
+
+For issues or questions, please open an issue at: https://github.com/MGrewer/20251111_DevSecOps/issues
+
+## License
+
+This project is provided for educational and training purposes.
 
 ---
-*One line. No repos. No hassle. Inspired by dbdemos simplicity.*
+
+Developed for DevSecOps training - Single command installation inspired by Databricks demo best practices.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
-DevSecOps Demo - Setup with Databricks Git Folder Creation
-Following Databricks API best practices
+DevSecOps Demo - Setup with Additional Volume Data
+Following Databricks API best practices with extended data import
 """
 
 import os, shutil, glob, json, requests, time
@@ -12,11 +12,19 @@ print("""
 ╚══════════════════════════════════════════════════════════════╝
 """)
 
-# Configuration
-CATALOG = "DevSecOps_Labs"
-SCHEMA = "Agent_Bricks_Lab"
+# Configuration - Single Catalog for Both Labs
+CATALOG = "devsecops_labs"
+
+# DevSecOps Agent Bricks Lab
+AGENT_SCHEMA = "agent_bricks_lab"  # lowercase
 VOLUME = "meijer_store_transcripts"
+RAW_VOLUME = "raw_data"
 TABLE = "meijer_store_tickets"
+
+# Vibe Code Assistant Lab (Demand Sensing)
+VIBE_SCHEMA = "demand_sensing"
+VIBE_VOLUME = "data"
+
 GITHUB_URL = "https://github.com/MGrewer/20251111_DevSecOps"
 
 # Get Databricks workspace context
@@ -121,12 +129,41 @@ def create_git_folder(repo_url):
             print(f"  ⚠️ Could not create Git folder: {alt_resp.text[:100]}")
             return None
 
+def copy_directory_recursive(src_dir, dst_dir):
+    """Recursively copy directory contents maintaining structure"""
+    file_count = 0
+    
+    for root, dirs, files in os.walk(src_dir):
+        # Calculate relative path
+        rel_path = os.path.relpath(root, src_dir)
+        
+        # Create target directory
+        if rel_path != ".":
+            target_dir = os.path.join(dst_dir, rel_path)
+        else:
+            target_dir = dst_dir
+            
+        os.makedirs(target_dir, exist_ok=True)
+        
+        # Copy files
+        for filename in files:
+            if not filename.endswith('.crc'):  # Skip checksum files
+                src_file = os.path.join(root, filename)
+                dst_file = os.path.join(target_dir, filename)
+                try:
+                    shutil.copy2(src_file, dst_file)
+                    file_count += 1
+                except:
+                    pass
+    
+    return file_count
+
 # Main setup
-print("\n[1/5] Creating Databricks Git folder...")
+print("\n[1/7] Creating Databricks Git folder...")
 git_folder_path = create_git_folder(GITHUB_URL)
 
 # Also clone to /tmp for immediate use (in case Git folder has sync issues)
-print("\n[2/5] Cloning for immediate setup...")
+print("\n[2/7] Cloning for immediate setup...")
 temp_path = f"/tmp/demo_{int(time.time())}"
 import subprocess
 try:
@@ -147,23 +184,37 @@ else:
     exit(1)
 
 # Create UC assets
-print("\n[3/5] Creating Unity Catalog assets...")
+print("\n[3/7] Creating Unity Catalog assets...")
+
+# Create single catalog for both labs
 try:
     spark.sql(f"CREATE CATALOG IF NOT EXISTS `{CATALOG}`")
     print(f"  ✓ Catalog: {CATALOG}")
 except:
     print(f"  ℹ️ Using existing: {CATALOG}")
 
-spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{CATALOG}`.`{SCHEMA}`")
-print(f"  ✓ Schema: {SCHEMA}")
+# Create Agent Bricks Lab schema (lowercase)
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{CATALOG}`.`{AGENT_SCHEMA}`")
+print(f"  ✓ Schema: {CATALOG}.{AGENT_SCHEMA}")
 
-spark.sql(f"CREATE VOLUME IF NOT EXISTS `{CATALOG}`.`{SCHEMA}`.`{VOLUME}`")
-print(f"  ✓ Volume: {VOLUME}")
+spark.sql(f"CREATE VOLUME IF NOT EXISTS `{CATALOG}`.`{AGENT_SCHEMA}`.`{VOLUME}`")
+print(f"  ✓ Volume: {CATALOG}.{AGENT_SCHEMA}.{VOLUME}")
+
+spark.sql(f"CREATE VOLUME IF NOT EXISTS `{CATALOG}`.`{AGENT_SCHEMA}`.`{RAW_VOLUME}`")
+print(f"  ✓ Volume: {CATALOG}.{AGENT_SCHEMA}.{RAW_VOLUME}")
+
+# Create Demand Sensing schema (for Vibe Code Assistant Lab)
+print("\n[3b/7] Creating Demand Sensing schema...")
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{CATALOG}`.`{VIBE_SCHEMA}`")
+print(f"  ✓ Schema: {CATALOG}.{VIBE_SCHEMA}")
+
+spark.sql(f"CREATE VOLUME IF NOT EXISTS `{CATALOG}`.`{VIBE_SCHEMA}`.`{VIBE_VOLUME}`")
+print(f"  ✓ Volume: {CATALOG}.{VIBE_SCHEMA}.{VIBE_VOLUME}")
 
 # Copy PDFs using simple Python file operations
-print("\n[4/5] Importing PDFs...")
+print("\n[4/7] Importing PDFs...")
 src_dir = f"{REPO_PATH}/data/pdfs"
-dst_dir = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}"
+dst_dir = f"/Volumes/{CATALOG}/{AGENT_SCHEMA}/{VOLUME}"
 success = 0
 
 if os.path.exists(src_dir):
@@ -183,8 +234,38 @@ if os.path.exists(src_dir):
 else:
     print(f"  ⚠️ No PDFs found at {src_dir}")
 
-# Create table using Volume staging
-print("\n[5/5] Creating Delta table...")
+# Copy raw data files (competitor_pricing, products, sales, stores)
+print("\n[5/7] Importing raw data files...")
+raw_src_dir = f"{REPO_PATH}/data/raw"
+raw_dst_dir = f"/Volumes/{CATALOG}/{AGENT_SCHEMA}/{RAW_VOLUME}"
+vibe_dst_dir = f"/Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}"
+
+if os.path.exists(raw_src_dir):
+    # List subdirectories
+    subdirs = [d for d in os.listdir(raw_src_dir) if os.path.isdir(os.path.join(raw_src_dir, d))]
+    print(f"  Found {len(subdirs)} data directories: {', '.join(subdirs)}")
+    
+    # Copy to DevSecOps volume
+    total_files = copy_directory_recursive(raw_src_dir, raw_dst_dir)
+    print(f"  ✓ Imported {total_files} raw data files to DevSecOps volume")
+    
+    # Also copy to Vibe Code Assistant Lab volume
+    vibe_files = copy_directory_recursive(raw_src_dir, vibe_dst_dir)
+    print(f"  ✓ Imported {vibe_files} raw data files to Vibe volume")
+    
+    # Show what was imported
+    for subdir in subdirs:
+        subdir_path = os.path.join(raw_dst_dir, subdir)
+        if os.path.exists(subdir_path):
+            file_count = len([f for f in os.listdir(subdir_path) if os.path.isfile(os.path.join(subdir_path, f))])
+            print(f"    • {subdir}/: {file_count} files")
+else:
+    print(f"  ⚠️ No raw data found at {raw_src_dir}")
+    total_files = 0
+    vibe_files = 0
+
+# Create main table using Volume staging
+print("\n[6/7] Creating Delta table...")
 try:
     # Stage parquet files through Volume
     parquet_staging = f"{dst_dir}/.parquet_temp"
@@ -197,12 +278,13 @@ try:
         
         # Read from Volume path (avoids file:// protocol issues)
         df = spark.read.parquet(f"{parquet_staging}/*.parquet")
-        df.write.mode("overwrite").saveAsTable(f"`{CATALOG}`.`{SCHEMA}`.`{TABLE}`")
+        df.write.mode("overwrite").saveAsTable(f"`{CATALOG}`.`{AGENT_SCHEMA}`.`{TABLE}`")
         
         # Clean up staging
         shutil.rmtree(parquet_staging, ignore_errors=True)
         
-        count = spark.table(f"`{CATALOG}`.`{SCHEMA}`.`{TABLE}`").count()
+        count = spark.table(f"`{CATALOG}`.`{AGENT_SCHEMA}`.`{TABLE}`").count()
+        print(f"  ✓ Table created: {count:,} rows")
         print(f"  ✓ Table created: {count:,} rows")
     else:
         print(f"  ⚠️ No parquet files found")
@@ -210,6 +292,60 @@ try:
 except Exception as e:
     print(f"  ❌ Table failed: {str(e)[:100]}")
     count = 0
+
+# Optional: Create tables from raw data files
+print("\n[7/7] Processing raw data files into tables...")
+tables_created = []
+vibe_tables_created = []
+
+try:
+    # Check each subdirectory for CSV/Parquet files
+    raw_volume_path = f"/Volumes/{CATALOG}/{AGENT_SCHEMA}/{RAW_VOLUME}"
+    vibe_volume_path = f"/Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}"
+    
+    for subdir in ['competitor_pricing', 'products', 'sales', 'stores']:
+        subdir_path = f"{raw_volume_path}/{subdir}"
+        vibe_subdir_path = f"{vibe_volume_path}/{subdir}"
+        
+        if os.path.exists(subdir_path):
+            # Check for CSV files
+            csv_files = glob.glob(f"{subdir_path}/*.csv")
+            parquet_files = glob.glob(f"{subdir_path}/*.parquet")
+            
+            if csv_files:
+                # Read CSV and create table in Agent Bricks Lab schema
+                df = spark.read.option("header", "true").option("inferSchema", "true").csv(f"{subdir_path}/*.csv")
+                table_name = f"`{CATALOG}`.`{AGENT_SCHEMA}`.`{subdir}`"
+                df.write.mode("overwrite").saveAsTable(table_name)
+                row_count = spark.table(table_name).count()
+                tables_created.append(f"{subdir} ({row_count:,} rows)")
+                print(f"  ✓ Created agent_bricks_lab table: {subdir} ({row_count:,} rows)")
+                
+                # Also create in Demand Sensing schema
+                vibe_table_name = f"`{CATALOG}`.`{VIBE_SCHEMA}`.`{subdir}`"
+                df.write.mode("overwrite").saveAsTable(vibe_table_name)
+                vibe_tables_created.append(f"{subdir} ({row_count:,} rows)")
+                print(f"  ✓ Created demand_sensing table: {subdir} ({row_count:,} rows)")
+                
+            elif parquet_files:
+                # Read Parquet and create table in Agent Bricks Lab schema
+                df = spark.read.parquet(f"{subdir_path}/*.parquet")
+                table_name = f"`{CATALOG}`.`{AGENT_SCHEMA}`.`{subdir}`"
+                df.write.mode("overwrite").saveAsTable(table_name)
+                row_count = spark.table(table_name).count()
+                tables_created.append(f"{subdir} ({row_count:,} rows)")
+                print(f"  ✓ Created agent_bricks_lab table: {subdir} ({row_count:,} rows)")
+                
+                # Also create in Demand Sensing schema
+                vibe_table_name = f"`{CATALOG}`.`{VIBE_SCHEMA}`.`{subdir}`"
+                df.write.mode("overwrite").saveAsTable(vibe_table_name)
+                vibe_tables_created.append(f"{subdir} ({row_count:,} rows)")
+                print(f"  ✓ Created demand_sensing table: {subdir} ({row_count:,} rows)")
+            else:
+                print(f"  ℹ️ No CSV/Parquet files in {subdir}/")
+                
+except Exception as e:
+    print(f"  ⚠️ Could not create all tables: {str(e)[:100]}")
 
 # Clean up temp if used
 if REPO_PATH == temp_path and temp_path.startswith("/tmp/"):
@@ -219,21 +355,63 @@ if REPO_PATH == temp_path and temp_path.startswith("/tmp/"):
     except:
         pass
 
+# Final summary
 print(f"""
 ╔══════════════════════════════════════════════════════════════╗
 ║                    ✅ Setup Complete!                        ║
 ╚══════════════════════════════════════════════════════════════╝
 
-📦 Created:
-  • {CATALOG}.{SCHEMA}.{VOLUME} ({success} PDFs)
-  • {CATALOG}.{SCHEMA}.{TABLE} ({count:,} rows)
-  {"• " + git_folder_path if git_folder_path else ""}
+📦 Catalog: {CATALOG}
 
-📝 Try:
-  SELECT * FROM {CATALOG}.{SCHEMA}.{TABLE} LIMIT 10;
+📂 Agent Bricks Lab (agent_bricks_lab):
+  Volumes:
+    • {VOLUME} ({success} PDFs imported)
+    • {RAW_VOLUME} ({total_files if 'total_files' in locals() else 0} raw data files)
+  Tables:
+    • {TABLE} ({count:,} rows)
+""")
 
+if tables_created:
+    for table_info in tables_created:
+        print(f"    • {table_info}")
+
+print(f"""
+📂 Demand Sensing Lab (demand_sensing):
+  Volume:
+    • {VIBE_VOLUME} ({vibe_files if 'vibe_files' in locals() else 0} raw data files)
+""")
+
+if vibe_tables_created:
+    print("  Tables:")
+    for table_info in vibe_tables_created:
+        print(f"    • {table_info}")
+
+print(f"""
+📝 Try these queries:
+  -- Agent Bricks Lab
+  SELECT * FROM {CATALOG}.{AGENT_SCHEMA}.{TABLE} LIMIT 10;
+""")
+
+if tables_created:
+    print(f"  SELECT * FROM {CATALOG}.{AGENT_SCHEMA}.competitor_pricing LIMIT 10;")
+    print(f"  SELECT * FROM {CATALOG}.{AGENT_SCHEMA}.products LIMIT 10;")
+
+print(f"""
+  -- Demand Sensing Lab
+  USE CATALOG {CATALOG};
+  USE SCHEMA {VIBE_SCHEMA};
+  SHOW TABLES;
+""")
+
+if vibe_tables_created:
+    print(f"  SELECT * FROM {CATALOG}.{VIBE_SCHEMA}.products LIMIT 10;")
+    print(f"  SELECT * FROM {CATALOG}.{VIBE_SCHEMA}.sales LIMIT 10;")
+
+print(f"""
 📂 Resources:
-  PDFs: /Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/
+  PDFs: /Volumes/{CATALOG}/{AGENT_SCHEMA}/{VOLUME}/
+  Raw Data: /Volumes/{CATALOG}/{AGENT_SCHEMA}/{RAW_VOLUME}/
+  Demand Sensing: /Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}/
   {"Git: " + git_folder_path if git_folder_path else ""}
   
 💡 To update the Git folder later:
