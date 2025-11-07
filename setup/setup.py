@@ -1,446 +1,168 @@
 #!/usr/bin/env python
 """
-DevSecOps Demo - Setup Script
-Single-command installation for Databricks lab environment
+DevSecOps Demo - One-Click Setup
+Sets up Unity Catalog assets, volumes, and starter table
+for the DevSecOps Labs environment per README specification.
 """
 
-import os, shutil, glob, json, requests, time
+import os, sys, glob, shutil, time
 
+# ╔════════════════════════════════════════════════════════════════════╗
+# ║                      0. PRE-FLIGHT CHECKS                          ║
+# ╚════════════════════════════════════════════════════════════════════╝
 print("""
-╔══════════════════════════════════════════════════════════════╗
-║         DevSecOps Demo - Installing...                       ║
-╚══════════════════════════════════════════════════════════════╝
+╔════════════════════════════════════════════════════════════════════╗
+║                    DevSecOps Labs - Installing                     ║
+╚════════════════════════════════════════════════════════════════════╝
 """)
 
-# Configuration - Single Catalog for Both Labs
-CATALOG = "devsecops_labs"
+try:
+    spark  # noqa
+    dbutils  # noqa
+except NameError:
+    print(" [ FAIL ]  Must be run inside a Databricks notebook environment.")
+    sys.exit(1)
 
-# DevSecOps Agent Bricks Lab
-AGENT_SCHEMA = "agent_bricks_lab"  # lowercase
-VOLUME = "meijer_store_transcripts"
-RAW_VOLUME = "raw_data"
-TABLE = "meijer_store_tickets"
+if "REPO_PATH" not in globals():
+    demo_dirs = [d for d in os.listdir("/tmp") if d.startswith("demo_")]
+    if not demo_dirs:
+        print(" [ FAIL ]  No repository found; REPO_PATH not set.")
+        sys.exit(1)
+    demo_dirs.sort(key=lambda x: os.path.getmtime(f"/tmp/{x}"), reverse=True)
+    REPO_PATH = f"/tmp/{demo_dirs[0]}"
 
-# Vibe Code Assistant Lab (Demand Sensing)
-VIBE_SCHEMA = "demand_sensing"
-VIBE_VOLUME = "data"
+print(f" [ INFO ]  Installing from: {REPO_PATH}")
 
-GITHUB_URL = "https://github.com/MGrewer/20251111_DevSecOps"
+# ---------------------------------------------------------------------
+# 1. CONFIGURATION (per README)
+# ---------------------------------------------------------------------
+CATALOG         = "devsecops_labs"
+AGENT_SCHEMA    = "agent_bricks_lab"
+DEMAND_SCHEMA   = "demand_sensing"
+PDFS_VOLUME     = "meijer_store_transcripts"
+RAW_VOLUME      = "raw_data"
+DATA_VOLUME     = "data"
+TABLE_NAME      = "meijer_store_tickets"
 
-# Get Databricks workspace context
-def get_databricks_context():
-    """Get host and token from notebook context"""
+q = lambda x: f"`{x}`"
+
+def divider(title):
+    print(f"\n{'-'*72}\n{title}\n{'-'*72}")
+
+# ---------------------------------------------------------------------
+divider("1. CREATING UNITY CATALOG ASSETS")
+# ---------------------------------------------------------------------
+spark.sql(f"CREATE CATALOG IF NOT EXISTS {q(CATALOG)}")
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS {q(CATALOG)}.{q(AGENT_SCHEMA)}")
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS {q(CATALOG)}.{q(DEMAND_SCHEMA)}")
+spark.sql(f"CREATE VOLUME IF NOT EXISTS {q(CATALOG)}.{q(AGENT_SCHEMA)}.{q(PDFS_VOLUME)}")
+spark.sql(f"CREATE VOLUME IF NOT EXISTS {q(CATALOG)}.{q(AGENT_SCHEMA)}.{q(RAW_VOLUME)}")
+spark.sql(f"CREATE VOLUME IF NOT EXISTS {q(CATALOG)}.{q(DEMAND_SCHEMA)}.{q(DATA_VOLUME)}")
+
+pdfs_vol_fs = f"/Volumes/{CATALOG}/{AGENT_SCHEMA}/{PDFS_VOLUME}"
+raw_vol_fs  = f"/Volumes/{CATALOG}/{AGENT_SCHEMA}/{RAW_VOLUME}"
+data_vol_fs = f"/Volumes/{CATALOG}/{DEMAND_SCHEMA}/{DATA_VOLUME}"
+
+print(f" [ OK ]  Catalog  → {CATALOG}")
+print(f" [ OK ]  Schemas  → {AGENT_SCHEMA}, {DEMAND_SCHEMA}")
+print(f" [ OK ]  Volumes  → {pdfs_vol_fs}, {raw_vol_fs}, {data_vol_fs}")
+
+# ---------------------------------------------------------------------
+divider("2. IMPORTING PDFS TO meijer_store_transcripts")
+# ---------------------------------------------------------------------
+pdf_dir = os.path.join(REPO_PATH, "data", "pdfs")
+pdfs = sorted(glob.glob(os.path.join(pdf_dir, "*.pdf")))
+copied = 0
+if not pdfs:
+    print(f" [ WARN ]  No PDFs found at {pdf_dir}")
+else:
+    os.makedirs(f"/dbfs{pdfs_vol_fs}", exist_ok=True)
     try:
-        ctx = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
-        host = ctx.browserHostName().get()
-        if not host.startswith("https://"):
-            host = "https://" + host
-        token = ctx.apiToken().get()
-        return host.rstrip("/"), token
-    except:
-        # Fallback to environment variables
-        import os
-        host = os.environ.get("DATABRICKS_HOST", "").rstrip("/")
-        token = os.environ.get("DATABRICKS_TOKEN", "")
-        return host, token
+        for i, src in enumerate(pdfs, start=1):
+            dbutils.fs.cp(f"file:{src}", f"{pdfs_vol_fs}/{os.path.basename(src)}")
+            copied += 1
+            if i % 50 == 0:
+                print(f"   ... copied {i}/{len(pdfs)}")
+        print(f" [ OK ]  Imported {copied}/{len(pdfs)} PDFs (fast path)")
+    except Exception as e:
+        print(f" [ INFO ] Fast path blocked ({str(e)[:100]}). Retrying via stream copy...")
+        for src in pdfs:
+            dst = f"/dbfs{pdfs_vol_fs}/{os.path.basename(src)}"
+            with open(src, "rb") as rf, open(dst, "wb") as wf:
+                shutil.copyfileobj(rf, wf, 1024 * 1024)
+            copied += 1
+        print(f" [ OK ]  Imported {copied} PDFs via fallback stream copy")
 
-def create_git_folder(repo_url):
-    """Create a Git folder following Databricks recommendations"""
-    
-    host, token = get_databricks_context()
-    
-    if not host or not token:
-        print("  ⚠️ Missing DATABRICKS_HOST or DATABRICKS_TOKEN")
-        return None
-    
-    # Get current user
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
-    
-    user_resp = requests.get(f"{host}/api/2.0/preview/scim/v2/Me", headers=headers)
-    if user_resp.status_code != 200:
-        print("  ⚠️ Cannot determine current user")
-        return None
-    
-    user_email = user_resp.json().get("userName", "unknown")
-    repo_name = repo_url.split("/")[-1].replace(".git", "")
-    repo_path = f"/Workspace/Users/{user_email}/projects/{repo_name}"
-    
-    # Check if repo already exists
-    list_resp = requests.get(
-        f"{host}/api/2.0/repos",
-        headers=headers,
-        params={"path_prefix": f"/Repos/{user_email}"}
-    )
-    
-    if list_resp.status_code == 200:
-        existing = list_resp.json().get("repos", [])
-        for repo in existing:
-            if repo_name in repo.get("path", ""):
-                repo_id = repo.get("id")
-                print(f"  ℹ️ Git folder exists: {repo.get('path')}")
-                
-                # Update to latest on main branch
-                update_resp = requests.patch(
-                    f"{host}/api/2.0/repos/{repo_id}",
-                    headers=headers,
-                    json={"branch": "main"}
-                )
-                if update_resp.status_code == 200:
-                    print(f"  ✓ Updated to latest main branch")
-                
-                return repo.get("path")
-    
-    # Create new Git folder
-    payload = {
-        "url": repo_url,
-        "provider": "gitHub",
-        "path": repo_path
-    }
-    
-    create_resp = requests.post(
-        f"{host}/api/2.0/repos",
-        headers=headers,
-        json=payload
-    )
-    
-    if create_resp.status_code in (200, 201):
-        result = create_resp.json()
-        print(f"  ✓ Created Git folder: {result.get('path')}")
-        return result.get('path')
-    else:
-        # Try alternate path if projects folder doesn't exist
-        alt_path = f"/Repos/{user_email}/{repo_name}"
-        payload["path"] = alt_path
-        
-        alt_resp = requests.post(
-            f"{host}/api/2.0/repos",
-            headers=headers,
-            json=payload
-        )
-        
-        if alt_resp.status_code in (200, 201):
-            result = alt_resp.json()
-            print(f"  ✓ Created Git folder: {result.get('path')}")
-            return result.get('path')
-        else:
-            print(f"  ⚠️ Could not create Git folder: {alt_resp.text[:100]}")
-            return None
-
-def copy_directory_recursive(src_dir, dst_dir):
-    """Recursively copy directory contents maintaining structure"""
-    file_count = 0
-    
-    for root, dirs, files in os.walk(src_dir):
-        # Calculate relative path
-        rel_path = os.path.relpath(root, src_dir)
-        
-        # Create target directory
-        if rel_path != ".":
-            target_dir = os.path.join(dst_dir, rel_path)
-        else:
-            target_dir = dst_dir
-            
-        os.makedirs(target_dir, exist_ok=True)
-        
-        # Copy files
-        for filename in files:
-            if not filename.endswith('.crc'):  # Skip checksum files
-                src_file = os.path.join(root, filename)
-                dst_file = os.path.join(target_dir, filename)
-                try:
-                    shutil.copy2(src_file, dst_file)
-                    file_count += 1
-                except:
-                    pass
-    
-    return file_count
-
-# Main setup
-print("\n[1/7] Creating Databricks Git folder...")
-git_folder_path = create_git_folder(GITHUB_URL)
-
-# Also clone to /tmp for immediate use (in case Git folder has sync issues)
-print("\n[2/7] Cloning for immediate setup...")
-temp_path = f"/tmp/demo_{int(time.time())}"
-import subprocess
-try:
-    subprocess.run(["git", "clone", GITHUB_URL, temp_path], check=True, capture_output=True)
-    print(f"  ✓ Cloned to: {temp_path}")
-except:
-    print(f"  ⚠️ Clone failed, will try to use Git folder")
-
-# Determine which path to use for data
-if git_folder_path and os.path.exists(f"{git_folder_path}/data"):
-    REPO_PATH = git_folder_path
-    print(f"  Using Git folder: {REPO_PATH}")
-elif os.path.exists(temp_path):
-    REPO_PATH = temp_path
-    print(f"  Using temp clone: {REPO_PATH}")
+# ---------------------------------------------------------------------
+divider("3. COPYING RAW SOURCE FILES TO raw_data AND demand_sensing.data")
+# ---------------------------------------------------------------------
+raw_src_root = os.path.join(REPO_PATH, "data", "raw")
+if not os.path.isdir(raw_src_root):
+    print(f" [ WARN ]  No raw source directory found: {raw_src_root}")
 else:
-    print("  ❌ No data source available")
-    exit(1)
+    subdirs = [d for d in os.listdir(raw_src_root) if os.path.isdir(os.path.join(raw_src_root, d))]
+    for name in subdirs:
+        src_dir = os.path.join(raw_src_root, name)
+        agent_dest = f"/dbfs{raw_vol_fs}/{name}"
+        demand_dest = f"/dbfs{data_vol_fs}/raw/{name}"
+        os.makedirs(agent_dest, exist_ok=True)
+        os.makedirs(demand_dest, exist_ok=True)
 
-# Create UC assets
-print("\n[3/7] Creating Unity Catalog assets...")
+        files = [f for f in glob.glob(os.path.join(src_dir, "*")) if os.path.isfile(f)]
+        if not files:
+            print(f" [ INFO ]  raw/{name} is empty")
+            continue
 
-# Create single catalog for both labs
-try:
-    spark.sql(f"CREATE CATALOG IF NOT EXISTS `{CATALOG}`")
-    print(f"  ✓ Catalog: {CATALOG}")
-except:
-    print(f"  ℹ️ Using existing: {CATALOG}")
+        for fp in files:
+            base = os.path.basename(fp)
+            with open(fp, "rb") as rf:
+                buf = rf.read()
+            open(f"{agent_dest}/{base}", "wb").write(buf)
+            open(f"{demand_dest}/{base}", "wb").write(buf)
+        print(f" [ OK ]  raw/{name} → {raw_vol_fs}/{name}  and  {data_vol_fs}/raw/{name}")
 
-# Create Agent Bricks Lab schema (lowercase)
-spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{CATALOG}`.`{AGENT_SCHEMA}`")
-print(f"  ✓ Schema: {CATALOG}.{AGENT_SCHEMA}")
-
-spark.sql(f"CREATE VOLUME IF NOT EXISTS `{CATALOG}`.`{AGENT_SCHEMA}`.`{VOLUME}`")
-print(f"  ✓ Volume: {CATALOG}.{AGENT_SCHEMA}.{VOLUME}")
-
-spark.sql(f"CREATE VOLUME IF NOT EXISTS `{CATALOG}`.`{AGENT_SCHEMA}`.`{RAW_VOLUME}`")
-print(f"  ✓ Volume: {CATALOG}.{AGENT_SCHEMA}.{RAW_VOLUME}")
-
-# Create Demand Sensing schema (for Vibe Code Assistant Lab)
-spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{CATALOG}`.`{VIBE_SCHEMA}`")
-print(f"  ✓ Schema: {CATALOG}.{VIBE_SCHEMA}")
-
-spark.sql(f"CREATE VOLUME IF NOT EXISTS `{CATALOG}`.`{VIBE_SCHEMA}`.`{VIBE_VOLUME}`")
-print(f"  ✓ Volume: {CATALOG}.{VIBE_SCHEMA}.{VIBE_VOLUME}")
-
-# Copy PDFs using simple Python file operations
-print("\n[4/7] Importing PDFs...")
-src_dir = f"{REPO_PATH}/data/pdfs"
-dst_dir = f"/Volumes/{CATALOG}/{AGENT_SCHEMA}/{VOLUME}"
-success = 0
-
-if os.path.exists(src_dir):
-    pdf_files = [f for f in os.listdir(src_dir) if f.endswith('.pdf')]
-    print(f"  Found {len(pdf_files)} PDFs")
-    
-    for i, pdf in enumerate(pdf_files):
-        try:
-            shutil.copy(f"{src_dir}/{pdf}", f"{dst_dir}/{pdf}")
-            success += 1
-            if (success % 50) == 0:
-                print(f"  Copied {success} files...")
-        except Exception as e:
-            pass
-    
-    print(f"  ✓ Imported {success}/{len(pdf_files)} PDFs")
-else:
-    print(f"  ⚠️ No PDFs found at {src_dir}")
-
-# Copy raw data files (competitor_pricing, products, sales, stores)
-print("\n[5/7] Importing raw data files...")
-raw_src_dir = f"{REPO_PATH}/data/raw"
-raw_dst_dir = f"/Volumes/{CATALOG}/{AGENT_SCHEMA}/{RAW_VOLUME}"
-vibe_dst_dir = f"/Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}"
-
-if os.path.exists(raw_src_dir):
-    # List subdirectories
-    subdirs = [d for d in os.listdir(raw_src_dir) if os.path.isdir(os.path.join(raw_src_dir, d))]
-    print(f"  Found {len(subdirs)} data directories: {', '.join(subdirs)}")
-    
-    # Copy to Agent Bricks Lab volume
-    total_files = copy_directory_recursive(raw_src_dir, raw_dst_dir)
-    print(f"  ✓ Imported {total_files} raw data files to agent_bricks_lab volume")
-    
-    # Also copy to Demand Sensing volume
-    vibe_files = copy_directory_recursive(raw_src_dir, vibe_dst_dir)
-    print(f"  ✓ Imported {vibe_files} raw data files to demand_sensing volume")
-    
-    # Show what was imported
-    for subdir in subdirs:
-        subdir_path = os.path.join(raw_dst_dir, subdir)
-        if os.path.exists(subdir_path):
-            file_count = len([f for f in os.listdir(subdir_path) if os.path.isfile(os.path.join(subdir_path, f))])
-            print(f"    • {subdir}/: {file_count} files")
-else:
-    print(f"  ⚠️ No raw data found at {raw_src_dir}")
-    total_files = 0
-    vibe_files = 0
-
-# Create main table using Volume staging
-print("\n[6/7] Creating Delta table...")
-try:
-    # Stage parquet files through Volume
-    parquet_staging = f"{dst_dir}/.parquet_temp"
-    os.makedirs(parquet_staging, exist_ok=True)
-    
-    parquet_files = glob.glob(f"{REPO_PATH}/data/table/*.parquet")
-    if parquet_files:
-        for pq in parquet_files:
-            shutil.copy(pq, parquet_staging)
-        
-        # Read from Volume path (avoids file:// protocol issues)
-        df = spark.read.parquet(f"{parquet_staging}/*.parquet")
-        df.write.mode("overwrite").saveAsTable(f"`{CATALOG}`.`{AGENT_SCHEMA}`.`{TABLE}`")
-        
-        # Clean up staging
-        shutil.rmtree(parquet_staging, ignore_errors=True)
-        
-        count = spark.table(f"`{CATALOG}`.`{AGENT_SCHEMA}`.`{TABLE}`").count()
-        print(f"  ✓ Table created: {count:,} rows")
-    else:
-        print(f"  ⚠️ No parquet files found")
-        count = 0
-except Exception as e:
-    print(f"  ❌ Table failed: {str(e)[:100]}")
-    count = 0
-
-# Import notebooks to user workspace
-print("\n[7/7] Setting up notebooks...")
-notebooks_imported = []
-
-try:
-    # Get current user's workspace path
-    current_user = spark.sql("SELECT current_user()").collect()[0][0]
-    user_workspace = f"/Workspace/Users/{current_user}/DevSecOps_Labs"
-    
-    # Create notebooks folder in user workspace
-    os.makedirs(user_workspace, exist_ok=True)
-    
-    # Check for notebooks in the repository
-    notebooks_source = f"{REPO_PATH}/notebooks"
-    if os.path.exists(notebooks_source):
-        notebook_files = [f for f in os.listdir(notebooks_source) 
-                         if f.endswith(('.py', '.ipynb', '.sql', '.scala', '.r'))]
-        
-        if notebook_files:
-            print(f"  Found {len(notebook_files)} notebooks to copy")
-            
-            # Copy all notebooks from repo to user workspace
-            for nb_file in notebook_files:
-                source_path = os.path.join(notebooks_source, nb_file)
-                dest_path = os.path.join(user_workspace, nb_file)
-                
-                try:
-                    shutil.copy2(source_path, dest_path)
-                    notebooks_imported.append(nb_file)
-                    print(f"    ✓ Copied: {nb_file}")
-                except Exception as e:
-                    print(f"    ⚠️ Could not copy {nb_file}: {str(e)[:50]}")
-            
-            print(f"  ✓ Copied {len(notebooks_imported)} notebooks to {user_workspace}")
-    else:
-        print("  ℹ️ No notebooks folder found in repository")
-        
-        # Create a basic starter notebook if none exist
-        starter_notebook = '''# Databricks notebook source
-# DevSecOps Lab - Quick Start Guide
-
-# COMMAND ----------
-# Set up catalog and schema
-catalog = "devsecops_labs"
-schema = "agent_bricks_lab"
-
-spark.sql(f"USE CATALOG {catalog}")
-spark.sql(f"USE SCHEMA {schema}")
-
-print(f"Using: {catalog}.{schema}")
-
-# COMMAND ----------
-# Explore available tables
-display(spark.sql("SHOW TABLES"))
-
-# COMMAND ----------
-# Query main table
-df = spark.table("meijer_store_tickets")
-print(f"Total records: {df.count():,}")
-display(df.limit(10))
-
-# COMMAND ----------
-# List available PDFs
-pdf_path = f"/Volumes/{catalog}/{schema}/meijer_store_transcripts"
-pdfs = dbutils.fs.ls(pdf_path)
-print(f"Total PDFs: {len(pdfs)}")
-
-# COMMAND ----------
-# Check raw data in volumes
-print("Raw data available in:")
-print(f"  • /Volumes/{catalog}/agent_bricks_lab/raw_data/")
-print(f"  • /Volumes/{catalog}/demand_sensing/data/")
-'''
-        
-        starter_path = os.path.join(user_workspace, "01_Quick_Start.py")
-        with open(starter_path, 'w') as f:
-            f.write(starter_notebook)
-        notebooks_imported.append("01_Quick_Start.py")
-        
-        print(f"  ✓ Created starter notebook in {user_workspace}")
-        
-except Exception as e:
-    print(f"  ⚠️ Could not set up notebooks: {str(e)[:100]}")
-
-# Clean up temp if used
-if REPO_PATH == temp_path and temp_path.startswith("/tmp/"):
+# ---------------------------------------------------------------------
+divider("4. CREATING TABLE meijer_store_tickets")
+# ---------------------------------------------------------------------
+tickets_raw_dir = os.path.join(raw_src_root, "tickets")
+def read_tickets():
+    pat = os.path.join(tickets_raw_dir, "*")
     try:
-        shutil.rmtree(temp_path)
-        print("\n  ✓ Cleaned up temp files")
-    except:
-        pass
+        return spark.read.parquet(f"file:{pat}")
+    except: pass
+    try:
+        return spark.read.options(header=True, inferSchema=True).csv(f"file:{pat}")
+    except: pass
+    try:
+        return spark.read.json(f"file:{pat}")
+    except: pass
+    pq_dir = os.path.join(REPO_PATH, "data", "table")
+    if glob.glob(os.path.join(pq_dir, "*.parquet")):
+        return spark.read.parquet(f"file:{os.path.join(pq_dir, '*.parquet')}")
+    return None
 
-# Final summary
+df = read_tickets()
+if df is None:
+    print(" [ WARN ]  Could not read tickets dataset. Table creation skipped.")
+else:
+    dest = f"{raw_vol_fs}/tables/tickets"
+    os.makedirs(f"/dbfs{dest}", exist_ok=True)
+    df.write.mode("overwrite").format("delta").save(dest)
+    full_table = f"{q(CATALOG)}.{q(AGENT_SCHEMA)}.{q(TABLE_NAME)}"
+    spark.sql(f"CREATE TABLE IF NOT EXISTS {full_table} USING DELTA LOCATION '{dest}'")
+    count = spark.table(full_table).count()
+    print(f" [ OK ]  Created {full_table} with {count:,} rows")
+
+# ---------------------------------------------------------------------
 print(f"""
-╔══════════════════════════════════════════════════════════════╗
-║                    ✅ Setup Complete!                        ║
-╚══════════════════════════════════════════════════════════════╝
-
-📦 Catalog: {CATALOG}
-
-📂 Agent Bricks Lab ({AGENT_SCHEMA}):
-  Volumes:
-    • {VOLUME} ({success} PDFs imported)
-    • {RAW_VOLUME} ({total_files if 'total_files' in locals() else 0} raw data files)
-  Tables:
-    • {TABLE} ({count:,} rows)
-
-📂 Demand Sensing Lab ({VIBE_SCHEMA}):
-  Volume:
-    • {VIBE_VOLUME} ({vibe_files if 'vibe_files' in locals() else 0} raw data files)
-  Tables:
-    • Tables will be created during lab exercises
-""")
-
-if notebooks_imported:
-    print(f"""
-📓 Notebooks:
-  Location: /Workspace/Users/{current_user if 'current_user' in locals() else 'your_user'}/DevSecOps_Labs/
-  Imported: {len(notebooks_imported)} notebooks""")
-    for nb in notebooks_imported[:5]:  # Show first 5
-        print(f"    • {nb}")
-    if len(notebooks_imported) > 5:
-        print(f"    ... and {len(notebooks_imported) - 5} more")
-
-print(f"""
-📝 Try these queries:
-  -- Agent Bricks Lab
-  USE CATALOG {CATALOG};
-  USE SCHEMA {AGENT_SCHEMA};
-  SELECT * FROM {TABLE} LIMIT 10;
-  
-  -- Demand Sensing Lab
-  USE CATALOG {CATALOG};
-  USE SCHEMA {VIBE_SCHEMA};
-  
-  -- Create tables from raw data files as needed
-  -- Example: CREATE TABLE products USING CSV 
-  -- LOCATION '/Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}/products'
-
-📂 Raw Data Locations:
-  Agent Bricks: /Volumes/{CATALOG}/{AGENT_SCHEMA}/{RAW_VOLUME}/
-  Demand Sensing: /Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}/
-  
-  Available datasets:
-    • competitor_pricing
-    • products  
-    • sales
-    • stores
-
-💡 Access your notebooks:
-  Navigate to: Workspace > Users > Your Name > DevSecOps_Labs
-  {"Git Folder: " + git_folder_path if git_folder_path else ""}
+╔════════════════════════════════════════════════════════════════════╗
+║                         SETUP COMPLETE                             ║
+╚════════════════════════════════════════════════════════════════════╝
+Catalog : {CATALOG}
+Schemas : {AGENT_SCHEMA}, {DEMAND_SCHEMA}
+Volumes :
+  - {CATALOG}.{AGENT_SCHEMA}.{PDFS_VOLUME}         (PDFs)
+  - {CATALOG}.{AGENT_SCHEMA}.{RAW_VOLUME}          (source + tickets)
+  - {CATALOG}.{DEMAND_SCHEMA}.{DATA_VOLUME}        (lab data)
+Table   : {CATALOG}.{AGENT_SCHEMA}.{TABLE_NAME}
 """)
