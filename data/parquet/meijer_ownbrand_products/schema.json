@@ -1,0 +1,132 @@
+[
+  {
+    "name": "fdc_id",
+    "type": "IntegerType()",
+    "nullable": true
+  },
+  {
+    "name": "description",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "brand_owner",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "brand_name",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "subbrand_name",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "gtin_upc",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "ingredients",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "serving_size",
+    "type": "DoubleType()",
+    "nullable": true
+  },
+  {
+    "name": "serving_size_unit",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "household_serving_full_text",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "data_type",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "published_date",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "publication_date",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "market_country",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "food_category",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "food_category_id",
+    "type": "IntegerType()",
+    "nullable": true
+  },
+  {
+    "name": "modified_date",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "data_source",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "package_weight",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "short_description",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "trade_channel",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "allHighlightFields",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "score",
+    "type": "DoubleType()",
+    "nullable": true
+  },
+  {
+    "name": "collection_timestamp",
+    "type": "TimestampType()",
+    "nullable": true
+  },
+  {
+    "name": "page_number",
+    "type": "IntegerType()",
+    "nullable": true
+  },
+  {
+    "name": "product_description_generation",
+    "type": "StringType()",
+    "nullable": true
+  }
+]

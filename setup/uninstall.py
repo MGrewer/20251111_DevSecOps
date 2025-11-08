@@ -10,8 +10,7 @@ Default behavior:
     devsecops_labs.demand_sensing.data
 - Drop schemas agent_bricks_lab and demand_sensing
 - Remove notebooks from workspace
-- Drop the catalog
-- Delete the Databricks Git folder
+- Leave the catalog in place
 
 Toggles:
 - FULL_WIPE: drop the catalog devsecops_labs CASCADE
@@ -35,8 +34,8 @@ TABLE_NAME  = "meijer_store_tickets"
 GIT_REPO_NAME = "20251111_DevSecOps"  # Git folder name
 
 # Behavior toggles (override by passing in globals when exec'ing if desired)
-FULL_WIPE        = globals().get("FULL_WIPE", True)         # True → drop catalog CASCADE
-REMOVE_GIT_FOLDER = globals().get("REMOVE_GIT_FOLDER", True) # True → delete the Git folder
+FULL_WIPE        = globals().get("FULL_WIPE", False)         # True → drop catalog CASCADE
+REMOVE_GIT_FOLDER = globals().get("REMOVE_GIT_FOLDER", False) # True → delete the Git folder
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Banner
@@ -64,15 +63,25 @@ pdfs_vol_fs = f"/Volumes/{CATALOG}/{AGENT_SCHEMA}/{PDFS_VOLUME}"
 data_vol_fs = f"/Volumes/{CATALOG}/{DEMAND_SCHEMA}/{DATA_VOLUME}"
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 1) Drop table
+# 1) Drop tables
 # ──────────────────────────────────────────────────────────────────────────────
 divider("1. DROPPING TABLES")
+
+# Drop meijer_store_tickets
 full_table = f"{q(CATALOG)}.{q(AGENT_SCHEMA)}.{q(TABLE_NAME)}"
 try:
     spark.sql(f"DROP TABLE IF EXISTS {full_table}")
     print(f" [OK ] Dropped table {CATALOG}.{AGENT_SCHEMA}.{TABLE_NAME}")
 except Exception as e:
     print(f" [WARN] Could not drop table {CATALOG}.{AGENT_SCHEMA}.{TABLE_NAME}: {str(e)[:160]}")
+
+# Drop meijer_ownbrand_products
+products_table = f"{q(CATALOG)}.{q(AGENT_SCHEMA)}.meijer_ownbrand_products"
+try:
+    spark.sql(f"DROP TABLE IF EXISTS {products_table}")
+    print(f" [OK ] Dropped table {CATALOG}.{AGENT_SCHEMA}.meijer_ownbrand_products")
+except Exception as e:
+    print(f" [WARN] Could not drop table {CATALOG}.{AGENT_SCHEMA}.meijer_ownbrand_products: {str(e)[:160]}")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 2) Drop volumes (with retry after clearing contents)
@@ -197,7 +206,8 @@ Catalog     : {CATALOG}{' (dropped)' if FULL_WIPE else ' (retained)'}
 Schemas     : {AGENT_SCHEMA} (dropped), {DEMAND_SCHEMA} (dropped)
 Volumes     : {CATALOG}.{AGENT_SCHEMA}.{PDFS_VOLUME} (dropped)
               {CATALOG}.{DEMAND_SCHEMA}.{DATA_VOLUME} (dropped)
-Table       : {CATALOG}.{AGENT_SCHEMA}.{TABLE_NAME} (dropped)
+Tables      : {CATALOG}.{AGENT_SCHEMA}.{TABLE_NAME} (dropped)
+              {CATALOG}.{AGENT_SCHEMA}.meijer_ownbrand_products (dropped)
 Notebooks   : /Workspace/Users/<you>/DevSecOps_Labs (removed)
 Git Folder  : {'removed' if REMOVE_GIT_FOLDER else 'retained'}
 

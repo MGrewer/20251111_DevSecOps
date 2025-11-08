@@ -16,7 +16,7 @@ print("""
 CATALOG = "devsecops_labs"
 
 # DevSecOps Agent Bricks Lab
-AGENT_SCHEMA = "agent_bricks_lab"  
+AGENT_SCHEMA = "agent_bricks_lab"  # lowercase
 VOLUME = "meijer_store_transcripts"
 TABLE = "meijer_store_tickets"
 
@@ -229,23 +229,23 @@ if os.path.exists(src_dir):
 else:
     print(f"  ⚠️ No PDFs found at {src_dir}")
 
-# Copy raw data files (competitor_pricing, products, sales, stores)
+# Copy CSV data files (competitor_pricing, products, sales, stores)
 # These go ONLY to demand_sensing volume, in a raw/ subdirectory
-print("\n[5/7] Importing raw data files to demand_sensing...")
-raw_src_dir = f"{REPO_PATH}/data/raw"
+print("\n[5/7] Importing CSV data files to demand_sensing...")
+csv_src_dir = f"{REPO_PATH}/data/csv"
 vibe_dst_dir = f"/Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}/raw"
 
-if os.path.exists(raw_src_dir):
+if os.path.exists(csv_src_dir):
     # Create raw subdirectory in volume
     os.makedirs(vibe_dst_dir, exist_ok=True)
     
     # List subdirectories
-    subdirs = [d for d in os.listdir(raw_src_dir) if os.path.isdir(os.path.join(raw_src_dir, d))]
+    subdirs = [d for d in os.listdir(csv_src_dir) if os.path.isdir(os.path.join(csv_src_dir, d))]
     print(f"  Found {len(subdirs)} data directories: {', '.join(subdirs)}")
     
     # Copy to Demand Sensing volume/raw/
-    vibe_files = copy_directory_recursive(raw_src_dir, vibe_dst_dir)
-    print(f"  ✓ Imported {vibe_files} raw data files to demand_sensing.data.raw")
+    vibe_files = copy_directory_recursive(csv_src_dir, vibe_dst_dir)
+    print(f"  ✓ Imported {vibe_files} CSV files to demand_sensing.data.raw")
     
     # Show what was imported
     for subdir in subdirs:
@@ -254,17 +254,19 @@ if os.path.exists(raw_src_dir):
             file_count = len([f for f in os.listdir(subdir_path) if os.path.isfile(os.path.join(subdir_path, f))])
             print(f"    • {subdir}/: {file_count} files")
 else:
-    print(f"  ⚠️ No raw data found at {raw_src_dir}")
+    print(f"  ⚠️ No CSV data found at {csv_src_dir}")
     vibe_files = 0
 
-# Create main table using Volume staging
-print("\n[6/7] Creating Delta table...")
+# Create Delta tables using Volume staging
+print("\n[6/7] Creating Delta tables...")
+
+# Table 1: meijer_store_tickets
 try:
     # Stage parquet files through Volume
-    parquet_staging = f"{dst_dir}/.parquet_temp"
+    parquet_staging = f"{dst_dir}/.parquet_temp_tickets"
     os.makedirs(parquet_staging, exist_ok=True)
     
-    parquet_files = glob.glob(f"{REPO_PATH}/data/table/*.parquet")
+    parquet_files = glob.glob(f"{REPO_PATH}/data/parquet/meijer_store_tickets/*.parquet")
     if parquet_files:
         for pq in parquet_files:
             shutil.copy(pq, parquet_staging)
@@ -277,13 +279,40 @@ try:
         shutil.rmtree(parquet_staging, ignore_errors=True)
         
         count = spark.table(f"`{CATALOG}`.`{AGENT_SCHEMA}`.`{TABLE}`").count()
-        print(f"  ✓ Table created: {count:,} rows")
+        print(f"  ✓ Table created: meijer_store_tickets ({count:,} rows)")
     else:
-        print(f"  ⚠️ No parquet files found")
+        print(f"  ⚠️ No parquet files found for meijer_store_tickets")
         count = 0
 except Exception as e:
-    print(f"  ❌ Table failed: {str(e)[:100]}")
+    print(f"  ❌ Table meijer_store_tickets failed: {str(e)[:100]}")
     count = 0
+
+# Table 2: meijer_ownbrand_products
+try:
+    # Stage parquet files through Volume
+    parquet_staging_products = f"{dst_dir}/.parquet_temp_products"
+    os.makedirs(parquet_staging_products, exist_ok=True)
+    
+    parquet_files_products = glob.glob(f"{REPO_PATH}/data/parquet/meijer_ownbrand_products/*.parquet")
+    if parquet_files_products:
+        for pq in parquet_files_products:
+            shutil.copy(pq, parquet_staging_products)
+        
+        # Read from Volume path (avoids file:// protocol issues)
+        df_products = spark.read.parquet(f"{parquet_staging_products}/*.parquet")
+        df_products.write.mode("overwrite").saveAsTable(f"`{CATALOG}`.`{AGENT_SCHEMA}`.meijer_ownbrand_products")
+        
+        # Clean up staging
+        shutil.rmtree(parquet_staging_products, ignore_errors=True)
+        
+        count_products = spark.table(f"`{CATALOG}`.`{AGENT_SCHEMA}`.meijer_ownbrand_products").count()
+        print(f"  ✓ Table created: meijer_ownbrand_products ({count_products:,} rows)")
+    else:
+        print(f"  ⚠️ No parquet files found for meijer_ownbrand_products")
+        count_products = 0
+except Exception as e:
+    print(f"  ❌ Table meijer_ownbrand_products failed: {str(e)[:100]}")
+    count_products = 0
 
 # Import notebooks to user workspace
 print("\n[7/7] Setting up notebooks...")
@@ -387,6 +416,7 @@ print(f"""
     • {VOLUME} ({success} PDFs imported)
   Tables:
     • {TABLE} ({count:,} rows)
+    • meijer_ownbrand_products ({count_products if 'count_products' in locals() else 0:,} rows)
 
 📂 Demand Sensing Lab ({VIBE_SCHEMA}):
   Volume:

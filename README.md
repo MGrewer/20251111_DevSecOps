@@ -12,7 +12,7 @@ The script will:
 1. Download everything from GitHub
 2. Create Unity Catalog assets for both labs
 3. Import PDF transcripts
-4. Create Delta table with sample data
+4. Create Delta tables with sample data
 5. Import lab notebooks with folder structure
 6. Clean up temp files
 
@@ -24,6 +24,7 @@ Total time: ~2-3 minutes
 - `devsecops_labs.agent_bricks_lab` - Schema
 - `meijer_store_transcripts` - Volume with PDF transcripts
 - `meijer_store_tickets` - Delta table
+- `meijer_ownbrand_products` - Delta table
 
 ### Demand Sensing Lab (Vibe Code Assistant)
 - `devsecops_labs.demand_sensing` - Schema
@@ -89,7 +90,24 @@ spark.sql("""
 - Network access to GitHub (public repo)
 - Python 3.8+ (standard in Databricks)
 
-## Full Uninstall (Remove Everything)
+## Uninstall
+
+### Quick Uninstall (One-Liner)
+
+Remove all lab assets with a single command:
+
+```python
+import subprocess, time; t=str(int(time.time())); subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", f"/tmp/uninstall_{t}"], check=True); exec(open(f"/tmp/uninstall_{t}/setup/uninstall.py").read())
+```
+
+This removes:
+- Delta tables
+- All volumes (PDFs and raw data)
+- Both schemas
+- Notebooks from your workspace
+- Keeps the catalog and Git folder
+
+### Full Uninstall (Remove Everything)
 
 To also remove the catalog and Git folder:
 
@@ -103,6 +121,7 @@ If you prefer manual cleanup, use these commands:
 ```sql
 -- Remove Agent Bricks Lab assets
 DROP TABLE IF EXISTS devsecops_labs.agent_bricks_lab.meijer_store_tickets;
+DROP TABLE IF EXISTS devsecops_labs.agent_bricks_lab.meijer_ownbrand_products;
 DROP VOLUME IF EXISTS devsecops_labs.agent_bricks_lab.meijer_store_transcripts;
 DROP SCHEMA IF EXISTS devsecops_labs.agent_bricks_lab CASCADE;
 
@@ -124,8 +143,10 @@ To remove notebooks from your workspace:
 20251111_DevSecOps/
 ├── data/
 │   ├── pdfs/              # PDF call transcripts
-│   ├── table/             # Parquet files for Delta table
-│   └── raw/               # Raw CSV datasets
+│   ├── parquet/           # Delta table parquet files
+│   │   ├── meijer_store_tickets/
+│   │   └── meijer_ownbrand_products/
+│   └── csv/               # CSV datasets
 │       ├── competitor_pricing/
 │       ├── products/
 │       ├── sales/
