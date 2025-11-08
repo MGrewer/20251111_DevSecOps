@@ -5,7 +5,7 @@
 Copy and paste this into any Databricks notebook and click run:
 
 ```python
-import subprocess, time; t=str(int(time.time())); subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", f"/tmp/demo_{t}"], check=True); exec(open(f"/tmp/demo_{t}/setup/setup.py").read())
+import subprocess, time; t=str(int(time.time())); subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", f"/tmp/labs_{t}"], check=True); exec(open(f"/tmp/labs_{t}/setup/setup.py").read())
 ```
 
 The script will:
