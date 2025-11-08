@@ -2,7 +2,7 @@
 
 ## One-Line Installation
 
-Just copy and paste this into any Databricks notebook and click run:
+Copy and paste this into any Databricks notebook and click run:
 
 ```python
 import subprocess, time; t=str(int(time.time())); subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", f"/tmp/demo_{t}"], check=True); exec(open(f"/tmp/demo_{t}/setup/setup.py").read())
@@ -82,26 +82,6 @@ spark.sql("""
 """)
 ```
 
-## Alternative Installation Methods
-
-If git isn't available, use wget/curl:
-```python
-import requests
-exec(requests.get("https://raw.githubusercontent.com/MGrewer/20251111_DevSecOps/main/setup/setup.py").text)
-```
-
-Or with more error handling:
-```python
-import subprocess, time
-try:
-    t = str(int(time.time()))
-    subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", f"/tmp/demo_{t}"], check=True)
-    exec(open(f"/tmp/demo_{t}/setup/setup.py").read())
-except Exception as e:
-    print(f"Failed to clone: {e}")
-    print("Check network connectivity or try the requests method above")
-```
-
 ## Requirements
 
 - Databricks workspace with Unity Catalog enabled
@@ -109,24 +89,7 @@ except Exception as e:
 - Network access to GitHub (public repo)
 - Python 3.8+ (standard in Databricks)
 
-## Uninstall
-
-### Quick Uninstall (One-Liner)
-
-Remove all lab assets with a single command:
-
-```python
-import subprocess, time; t=str(int(time.time())); subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", f"/tmp/uninstall_{t}"], check=True); exec(open(f"/tmp/uninstall_{t}/setup/uninstall.py").read())
-```
-
-This removes:
-- Delta table
-- All volumes (PDFs and raw data)
-- Both schemas
-- Notebooks from your workspace
-- Keeps the catalog and Git folder
-
-### Full Uninstall (Remove Everything)
+## Full Uninstall (Remove Everything)
 
 To also remove the catalog and Git folder:
 
