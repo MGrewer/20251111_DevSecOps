@@ -5,10 +5,10 @@
 Just copy and paste this into any Databricks notebook:
 
 ```python
-import subprocess; subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", "/tmp/demo"], check=True); exec(open("/tmp/demo/setup/setup.py").read())
+import subprocess, time; t=str(int(time.time())); subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", f"/tmp/demo_{t}"], check=True); exec(open(f"/tmp/demo_{t}/setup/setup.py").read())
 ```
 
-The script will:
+**That's it!** No Repos setup needed. The script will:
 1. Download everything from GitHub
 2. Create Unity Catalog assets for both labs
 3. Import PDF transcripts
@@ -92,10 +92,11 @@ exec(requests.get("https://raw.githubusercontent.com/MGrewer/20251111_DevSecOps/
 
 Or with more error handling:
 ```python
-import subprocess
+import subprocess, time
 try:
-    subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", "/tmp/demo"], check=True)
-    exec(open("/tmp/demo/setup/setup.py").read())
+    t = str(int(time.time()))
+    subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", f"/tmp/demo_{t}"], check=True)
+    exec(open(f"/tmp/demo_{t}/setup/setup.py").read())
 except Exception as e:
     print(f"Failed to clone: {e}")
     print("Check network connectivity or try the requests method above")
@@ -110,12 +111,12 @@ except Exception as e:
 
 ## Uninstall
 
-### Quick Cleanup (One-Liner)
+### Quick Uninstall (One-Liner)
 
 Remove all lab assets with a single command:
 
 ```python
-import subprocess; subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", "/tmp/cleanup"], check=True); exec(open("/tmp/cleanup/cleanup.py").read())
+import subprocess, time; t=str(int(time.time())); subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", f"/tmp/uninstall_{t}"], check=True); exec(open(f"/tmp/uninstall_{t}/setup/uninstall.py").read())
 ```
 
 This removes:
@@ -125,12 +126,12 @@ This removes:
 - Notebooks from your workspace
 - Keeps the catalog and Git folder
 
-### Full Cleanup (Remove Everything)
+### Full Uninstall (Remove Everything)
 
 To also remove the catalog and Git folder:
 
 ```python
-import subprocess; subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", "/tmp/cleanup"], check=True); FULL_WIPE=True; REMOVE_GIT_FOLDER=True; exec(open("/tmp/cleanup/cleanup.py").read())
+import subprocess, time; t=str(int(time.time())); subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", f"/tmp/uninstall_{t}"], check=True); FULL_WIPE=True; REMOVE_GIT_FOLDER=True; exec(open(f"/tmp/uninstall_{t}/setup/uninstall.py").read())
 ```
 
 ### Manual Cleanup (SQL)
@@ -171,7 +172,8 @@ To remove notebooks from your workspace:
 │       ├── includes/
 │       └── *.ipynb        # Lab exercises
 ├── setup/
-│   └── setup.py           # One-click installer
+│   ├── setup.py           # One-click installer
+│   └── uninstall.py       # One-click uninstaller
 ├── config.json            # Configuration
 └── README.md              # This file
 ```
@@ -189,4 +191,4 @@ Focus on code assistance using retail sales and inventory data.
 Issues? Open a GitHub issue at: https://github.com/MGrewer/20251111_DevSecOps/issues
 
 ---
-*Inspired by dbdemos* 
+*Inspired by dbdemos https://github.com/databricks-demos/dbdemos?tab=readme-ov-file#dbdemos*

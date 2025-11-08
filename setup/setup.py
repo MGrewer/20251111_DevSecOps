@@ -413,7 +413,7 @@ print(f"""
   USE CATALOG {CATALOG};
   USE SCHEMA {VIBE_SCHEMA};
   
-  -- You will create tables from the raw data during the lab exercises
+  -- Create tables from raw data files as needed
   -- Example: CREATE TABLE products USING CSV 
   -- LOCATION '/Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}/products'
 
