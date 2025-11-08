@@ -224,18 +224,17 @@ print(f"  ✓ Volume: {CATALOG}.{VIBE_SCHEMA}.{VIBE_VOLUME}")
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{CATALOG}`.`default`")
 print(f"  ✓ Schema: {CATALOG}.default")
 
-# Register exercise checkpoint function
-print("  Creating UC function: checkpoint...")
+# Register checkpoint function
 try:
     spark.sql("""
     CREATE OR REPLACE FUNCTION devsecops_labs.default.checkpoint(
       userid STRING,
-      lab STRING,
-      exercise STRING
+      checkpoint_name STRING,
+      message STRING
     )
     RETURNS STRING
     LANGUAGE PYTHON
-    COMMENT 'Send Pushover notification when exercise checkpoint is reached'
+    COMMENT 'Send Pushover notification when checkpoint is reached'
     AS $$
 import requests
 
@@ -243,9 +242,13 @@ import requests
 PUSHOVER_TOKEN = "agksuj7h3cbzc4wy42o7o5wp45h5q6"
 PUSHOVER_USER = "utt38ueaq6hbu4ub7fwhz4cnravnz4"
 
-# Format message and title
-title = f"{lab} - Checkpoint"
-message = f"Exercise: {exercise}\\nUser: {userid}"
+# Format title and message body
+title = f"Checkpoint - {checkpoint_name}"
+
+# Build message body
+body = f"User: {userid}"
+if message and message.strip():
+    body = f"{body}\\n{message}"
 
 # Send Pushover notification
 try:
@@ -254,7 +257,7 @@ try:
         data={
             "token": PUSHOVER_TOKEN,
             "user": PUSHOVER_USER,
-            "message": message,
+            "message": body,
             "title": title,
             "priority": 0
         },
@@ -262,12 +265,12 @@ try:
     )
     
     if response.status_code == 200:
-        result = f"Checkpoint: {exercise}"
+        result = f"Checkpoint: {checkpoint_name}"
     else:
-        result = f"Checkpoint: {exercise} (notification failed: {response.status_code})"
+        result = f"Checkpoint: {checkpoint_name} (notification failed: {response.status_code})"
 
 except Exception as e:
-    result = f"Checkpoint: {exercise} (notification error: {str(e)[:50]})"
+    result = f"Checkpoint: {checkpoint_name} (notification error: {str(e)[:50]})"
 
 return result
 $$
@@ -418,7 +421,7 @@ try:
                     nb_count = len([f for f in files if f.endswith(('.ipynb', '.py', '.sql'))])
                     if nb_count > 0:
                         notebook_folders.append(rel_path)
-                        print(f"    • {rel_path}/: {nb_count} notebooks")
+                        print(f"    • {rel_path}/: {nb_count} notebook files")
         else:
             print("  ℹ️ No notebook files found")
     else:
@@ -482,17 +485,17 @@ if REPO_PATH == temp_path and temp_path.startswith("/tmp/"):
 try:
     # Determine if setup succeeded or failed
     if setup_errors:
-        lab_status = "Lab Setup Failed"
-        exercise_details = f"Errors: {', '.join(setup_errors)}"
+        checkpoint_name = "Lab Setup Failed"
+        checkpoint_message = f"Errors: {', '.join(setup_errors)}"
     else:
-        lab_status = "Lab Setup Complete"
-        exercise_details = f"{success} PDFs, {count:,} tickets, {count_products if 'count_products' in locals() else 0:,} products, {vibe_files if 'vibe_files' in locals() else 0} CSV files, {notebooks_imported if 'notebooks_imported' in locals() else 0} notebooks"
+        checkpoint_name = "Lab Setup Complete"
+        checkpoint_message = f"Success! Imported {success} PDFs, {count:,} tickets, {count_products if 'count_products' in locals() else 0:,} products, {vibe_files if 'vibe_files' in locals() else 0} CSV files, {notebooks_imported if 'notebooks_imported' in locals() else 0} notebook files"
     
     result = spark.sql(f"""
         SELECT devsecops_labs.default.checkpoint(
             '{current_user}',
-            '{lab_status}',
-            '{exercise_details}'
+            '{checkpoint_name}',
+            '{checkpoint_message}'
         )
     """).collect()[0][0]
     
