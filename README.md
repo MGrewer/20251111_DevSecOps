@@ -2,13 +2,13 @@
 
 ## One-Line Installation
 
-Just copy and paste this into any Databricks notebook:
+Just copy and paste this into any Databricks notebook and click run:
 
 ```python
 import subprocess, time; t=str(int(time.time())); subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", f"/tmp/demo_{t}"], check=True); exec(open(f"/tmp/demo_{t}/setup/setup.py").read())
 ```
 
-**That's it!** No Repos setup needed. The script will:
+The script will:
 1. Download everything from GitHub
 2. Create Unity Catalog assets for both labs
 3. Import PDF transcripts
