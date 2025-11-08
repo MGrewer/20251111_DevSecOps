@@ -18,7 +18,6 @@ CATALOG = "devsecops_labs"
 # DevSecOps Agent Bricks Lab
 AGENT_SCHEMA = "agent_bricks_lab"  # lowercase
 VOLUME = "meijer_store_transcripts"
-RAW_VOLUME = "raw_data"
 TABLE = "meijer_store_tickets"
 
 # Vibe Code Assistant Lab (Demand Sensing)
@@ -200,9 +199,6 @@ print(f"  ✓ Schema: {CATALOG}.{AGENT_SCHEMA}")
 spark.sql(f"CREATE VOLUME IF NOT EXISTS `{CATALOG}`.`{AGENT_SCHEMA}`.`{VOLUME}`")
 print(f"  ✓ Volume: {CATALOG}.{AGENT_SCHEMA}.{VOLUME}")
 
-spark.sql(f"CREATE VOLUME IF NOT EXISTS `{CATALOG}`.`{AGENT_SCHEMA}`.`{RAW_VOLUME}`")
-print(f"  ✓ Volume: {CATALOG}.{AGENT_SCHEMA}.{RAW_VOLUME}")
-
 # Create Demand Sensing schema (for Vibe Code Assistant Lab)
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{CATALOG}`.`{VIBE_SCHEMA}`")
 print(f"  ✓ Schema: {CATALOG}.{VIBE_SCHEMA}")
@@ -234,9 +230,9 @@ else:
     print(f"  ⚠️ No PDFs found at {src_dir}")
 
 # Copy raw data files (competitor_pricing, products, sales, stores)
-print("\n[5/7] Importing raw data files...")
+# These go ONLY to demand_sensing volume, not agent_bricks_lab
+print("\n[5/7] Importing raw data files to demand_sensing...")
 raw_src_dir = f"{REPO_PATH}/data/raw"
-raw_dst_dir = f"/Volumes/{CATALOG}/{AGENT_SCHEMA}/{RAW_VOLUME}"
 vibe_dst_dir = f"/Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}"
 
 if os.path.exists(raw_src_dir):
@@ -244,23 +240,18 @@ if os.path.exists(raw_src_dir):
     subdirs = [d for d in os.listdir(raw_src_dir) if os.path.isdir(os.path.join(raw_src_dir, d))]
     print(f"  Found {len(subdirs)} data directories: {', '.join(subdirs)}")
     
-    # Copy to Agent Bricks Lab volume
-    total_files = copy_directory_recursive(raw_src_dir, raw_dst_dir)
-    print(f"  ✓ Imported {total_files} raw data files to agent_bricks_lab volume")
-    
-    # Also copy to Demand Sensing volume
+    # Copy to Demand Sensing volume ONLY
     vibe_files = copy_directory_recursive(raw_src_dir, vibe_dst_dir)
     print(f"  ✓ Imported {vibe_files} raw data files to demand_sensing volume")
     
     # Show what was imported
     for subdir in subdirs:
-        subdir_path = os.path.join(raw_dst_dir, subdir)
+        subdir_path = os.path.join(vibe_dst_dir, subdir)
         if os.path.exists(subdir_path):
             file_count = len([f for f in os.listdir(subdir_path) if os.path.isfile(os.path.join(subdir_path, f))])
             print(f"    • {subdir}/: {file_count} files")
 else:
     print(f"  ⚠️ No raw data found at {raw_src_dir}")
-    total_files = 0
     vibe_files = 0
 
 # Create main table using Volume staging
@@ -359,7 +350,6 @@ print(f"Found {len(pdfs)} PDFs")
 # COMMAND ----------
 # Check raw data in volumes
 print("Raw data available in:")
-print(f"  • /Volumes/{catalog}/agent_bricks_lab/raw_data/")
 print(f"  • /Volumes/{catalog}/demand_sensing/data/")
 '''
         
@@ -392,7 +382,6 @@ print(f"""
 📂 Agent Bricks Lab ({AGENT_SCHEMA}):
   Volumes:
     • {VOLUME} ({success} PDFs imported)
-    • {RAW_VOLUME} ({total_files if 'total_files' in locals() else 0} raw data files)
   Tables:
     • {TABLE} ({count:,} rows)
 
@@ -424,12 +413,11 @@ print(f"""
   USE CATALOG {CATALOG};
   USE SCHEMA {VIBE_SCHEMA};
   
-  -- Create tables from raw data files as needed
+  -- You will create tables from the raw data during the lab exercises
   -- Example: CREATE TABLE products USING CSV 
   -- LOCATION '/Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}/products'
 
-📂 Raw Data Locations:
-  Agent Bricks: /Volumes/{CATALOG}/{AGENT_SCHEMA}/{RAW_VOLUME}/
+📂 Raw Data Location:
   Demand Sensing: /Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}/
   
   Available datasets:

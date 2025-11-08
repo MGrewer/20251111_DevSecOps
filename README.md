@@ -1,157 +1,192 @@
-Here’s the updated **README** rewritten to match your new one-click architecture, correct UC layout, and built-in cleanup option.
-It replaces the old “clone + exec” multi-line install with the new resilient one-liner and adds a cleanup section that mirrors it.
+# DevSecOps Labs - Databricks Training Materials
 
----
+## One-Line Installation
 
-# DevSecOps Databricks Lab Materials
-
-## Installation (One-Click)
-
-Execute this command in any Databricks notebook cell:
+Just copy and paste this into any Databricks notebook:
 
 ```python
-import requests; exec(requests.get("https://raw.githubusercontent.com/MGrewer/20251111_DevSecOps/main/setup/setup.py", timeout=60).text, {"spark": spark, "dbutils": dbutils})
+import subprocess; subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", "/tmp/demo"], check=True); exec(open("/tmp/demo/setup/setup.py").read())
 ```
 
-This automatically downloads and executes the latest **setup script**, which:
+The script will:
+1. Download everything from GitHub
+2. Create Unity Catalog assets for both labs
+3. Import PDF transcripts
+4. Create Delta table with sample data
+5. Import lab notebooks with folder structure
+6. Clean up temp files
 
-1. Creates the catalog **`devsecops_labs`**
-2. Builds the schemas **`agent_bricks_lab`** and **`demand_sensing`**
-3. Creates three volumes:
+Total time: ~2-3 minutes
 
-   * `agent_bricks_lab.meijer_store_transcripts` – PDF transcripts
-   * `agent_bricks_lab.raw_data` – raw source files
-   * `demand_sensing.data` – raw folders used in lab exercises
-4. Imports all PDF and raw data files
-5. Creates the table **`devsecops_labs.agent_bricks_lab.meijer_store_tickets`**
+## What Gets Created
 
-Typical runtime: **3–4 minutes**, no manual setup required.
+### Agent Bricks Lab
+- `devsecops_labs.agent_bricks_lab` - Schema
+- `meijer_store_transcripts` - Volume with PDF transcripts
+- `meijer_store_tickets` - Delta table
 
----
+### Demand Sensing Lab (Vibe Code Assistant)
+- `devsecops_labs.demand_sensing` - Schema
+- `data` - Volume with raw CSV data (competitor_pricing, products, sales, stores)
+- Lab notebooks in your workspace
 
-## Cleanup (One-Click Uninstall)
+## After Installation
 
-To remove all lab assets and reset the workspace:
-
-```python
-import requests; exec(requests.get("https://raw.githubusercontent.com/MGrewer/20251111_DevSecOps/main/setup/setup.py", timeout=60).text, {"spark": spark, "dbutils": dbutils, "MODE": "cleanup"})
-```
-
-This safely drops:
-
-* The `meijer_store_tickets` table
-* All three volumes
-* Both schemas (`agent_bricks_lab`, `demand_sensing`)
-* Optionally removes the `/Users/.../DevSecOps Demo` notebook folder
-
----
-
-## Created Assets
-
-### Catalog: `devsecops_labs`
-
-#### Schema: `agent_bricks_lab`
-
-* **Tables**
-
-  * `meijer_store_tickets`
-* **Volumes**
-
-  * `meijer_store_transcripts` – PDF transcripts
-  * `raw_data` – source files and tickets table data
-
-#### Schema: `demand_sensing`
-
-* **Volume**
-
-  * `data/raw/...` – four raw folders (`products`, `sales`, `stores`, `competitor_pricing`)
-* **Tables**
-
-  * Created during lab exercises
-
----
-
-## Example Usage
-
-### Explore the environment
-
+### Access Your Data
 ```sql
+-- View your data
 USE CATALOG devsecops_labs;
 USE SCHEMA agent_bricks_lab;
+
 SELECT * FROM meijer_store_tickets LIMIT 10;
+
+-- Count records
+SELECT COUNT(*) FROM meijer_store_tickets;
 ```
 
-### Browse files
+### Access PDFs and Files
+```python
+# List PDFs in Agent Bricks Lab
+pdfs = dbutils.fs.ls("/Volumes/devsecops_labs/agent_bricks_lab/meijer_store_transcripts")
+print(f"Found {len(pdfs)} PDFs")
+
+# List raw data directories in Demand Sensing Lab
+raw_data = dbutils.fs.ls("/Volumes/devsecops_labs/demand_sensing/data")
+for folder in raw_data:
+    print(f"  • {folder.name}")
+```
+
+### Access Lab Notebooks
+Navigate to: **Workspace > Users > Your Name > DevSecOps_Labs/**
+
+You'll find:
+- `vibe-code-assistant-lab/` - Complete lab notebooks with solutions
+- `includes/` - Helper files and utilities
+
+## Available Datasets
+
+### Raw Data (in demand_sensing schema only)
+- **competitor_pricing** - Competitor pricing data
+- **products** - Product catalog
+- **sales** - Historical sales transactions
+- **stores** - Store locations and details
+
+### Use in Your Labs
+```python
+# Example: Create table from raw CSV
+spark.sql("""
+  CREATE TABLE products 
+  USING CSV 
+  OPTIONS (header 'true', inferSchema 'true')
+  LOCATION '/Volumes/devsecops_labs/demand_sensing/data/products'
+""")
+```
+
+## Alternative Installation Methods
+
+If git isn't available, use wget/curl:
+```python
+import requests
+exec(requests.get("https://raw.githubusercontent.com/MGrewer/20251111_DevSecOps/main/setup/setup.py").text)
+```
+
+Or with more error handling:
+```python
+import subprocess
+try:
+    subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", "/tmp/demo"], check=True)
+    exec(open("/tmp/demo/setup/setup.py").read())
+except Exception as e:
+    print(f"Failed to clone: {e}")
+    print("Check network connectivity or try the requests method above")
+```
+
+## Requirements
+
+- Databricks workspace with Unity Catalog enabled
+- CREATE CATALOG permissions (or have `devsecops_labs` catalog pre-created)
+- Network access to GitHub (public repo)
+- Python 3.8+ (standard in Databricks)
+
+## Uninstall
+
+### Quick Cleanup (One-Liner)
+
+Remove all lab assets with a single command:
 
 ```python
-# PDF transcripts
-dbutils.fs.ls("/Volumes/devsecops_labs/agent_bricks_lab/meijer_store_transcripts")
-
-# Raw data (demand sensing)
-dbutils.fs.ls("/Volumes/devsecops_labs/demand_sensing/data/raw")
+import subprocess; subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", "/tmp/cleanup"], check=True); exec(open("/tmp/cleanup/cleanup.py").read())
 ```
 
-### Create lab tables manually
+This removes:
+- Delta table
+- All volumes (PDFs and raw data)
+- Both schemas
+- Notebooks from your workspace
+- Keeps the catalog and Git folder
 
+### Full Cleanup (Remove Everything)
+
+To also remove the catalog and Git folder:
+
+```python
+import subprocess; subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", "/tmp/cleanup"], check=True); FULL_WIPE=True; REMOVE_GIT_FOLDER=True; exec(open("/tmp/cleanup/cleanup.py").read())
+```
+
+### Manual Cleanup (SQL)
+
+If you prefer manual cleanup, use these commands:
 ```sql
-CREATE TABLE devsecops_labs.demand_sensing.products
-USING CSV
-OPTIONS (header = "true", inferSchema = "true")
-LOCATION '/Volumes/devsecops_labs/demand_sensing/data/raw/products';
+-- Remove Agent Bricks Lab assets
+DROP TABLE IF EXISTS devsecops_labs.agent_bricks_lab.meijer_store_tickets;
+DROP VOLUME IF EXISTS devsecops_labs.agent_bricks_lab.meijer_store_transcripts;
+DROP SCHEMA IF EXISTS devsecops_labs.agent_bricks_lab CASCADE;
 
-CREATE TABLE devsecops_labs.demand_sensing.sales
-USING PARQUET
-LOCATION '/Volumes/devsecops_labs/demand_sensing/data/raw/sales';
+-- Remove Demand Sensing Lab assets
+DROP VOLUME IF EXISTS devsecops_labs.demand_sensing.data;
+DROP SCHEMA IF EXISTS devsecops_labs.demand_sensing CASCADE;
+
+-- Remove catalog (only if empty and you created it)
+DROP CATALOG IF EXISTS devsecops_labs;
 ```
 
----
+To remove notebooks from your workspace:
+- Navigate to `/Workspace/Users/{your_name}/DevSecOps_Labs`
+- Right-click the folder and select "Delete"
 
 ## Repository Structure
 
 ```
 20251111_DevSecOps/
-├── setup/
-│   ├── setup.py      # One-click setup & cleanup dispatcher
-│   └── cleanup.py    # Cleanup logic
 ├── data/
-│   ├── pdfs/         # PDF transcripts
-│   ├── table/        # Parquet source for tickets table
-│   └── raw/
+│   ├── pdfs/              # PDF call transcripts
+│   ├── table/             # Parquet files for Delta table
+│   └── raw/               # Raw CSV datasets
 │       ├── competitor_pricing/
 │       ├── products/
 │       ├── sales/
 │       └── stores/
-└── notebooks/        # Optional example notebooks
+├── notebooks/
+│   └── vibe-code-assistant-lab/  # Lab notebooks + solutions
+│       ├── includes/
+│       └── *.ipynb        # Lab exercises
+├── setup/
+│   └── setup.py           # One-click installer
+├── config.json            # Configuration
+└── README.md              # This file
 ```
 
----
+## Lab Structure
 
-## Requirements
+#### Agent Bricks Lab
+Build a rag knowledge assistant, natural language query agent, unity catalog function, and a multi-agent supervisor in the context of retail store operations.
 
-* Databricks workspace with Unity Catalog enabled
-* CREATE CATALOG privileges
-* Network access to GitHub
-* ~500 MB available storage
-
----
-
-## Notes
-
-* Re-running the setup script automatically updates or re-creates all assets.
-* Cleanup can be invoked at any time with the same script.
-* If your cluster has no outbound internet, clone this repo into a Workspace Repo and run:
-
-```python
-exec(open("/Workspace/Repos/<user>/DevSecOps/setup/setup.py").read(), {"spark": spark, "dbutils": dbutils})
-```
-
----
+#### Vibe Coding Assistant (Demand Sensing Lab)
+Focus on code assistance using retail sales and inventory data.
 
 ## Support
 
-Report issues or request improvements at
-**[https://github.com/MGrewer/20251111_DevSecOps/issues](https://github.com/MGrewer/20251111_DevSecOps/issues)**
+Issues? Open a GitHub issue at: https://github.com/MGrewer/20251111_DevSecOps/issues
 
 ---
-
-Would you like me to include the visual summary box from the setup script (“Catalog / Schemas / Volumes / Table” layout) as a formatted code block at the end of the README to match the runtime summary?
+*Inspired by dbdemos* 
