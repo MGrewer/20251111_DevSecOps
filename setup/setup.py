@@ -16,7 +16,7 @@ print("""
 CATALOG = "devsecops_labs"
 
 # DevSecOps Agent Bricks Lab
-AGENT_SCHEMA = "agent_bricks_lab"  # lowercase
+AGENT_SCHEMA = "agent_bricks_lab"  
 VOLUME = "meijer_store_transcripts"
 TABLE = "meijer_store_tickets"
 
@@ -230,19 +230,22 @@ else:
     print(f"  ⚠️ No PDFs found at {src_dir}")
 
 # Copy raw data files (competitor_pricing, products, sales, stores)
-# These go ONLY to demand_sensing volume, not agent_bricks_lab
+# These go ONLY to demand_sensing volume, in a raw/ subdirectory
 print("\n[5/7] Importing raw data files to demand_sensing...")
 raw_src_dir = f"{REPO_PATH}/data/raw"
-vibe_dst_dir = f"/Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}"
+vibe_dst_dir = f"/Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}/raw"
 
 if os.path.exists(raw_src_dir):
+    # Create raw subdirectory in volume
+    os.makedirs(vibe_dst_dir, exist_ok=True)
+    
     # List subdirectories
     subdirs = [d for d in os.listdir(raw_src_dir) if os.path.isdir(os.path.join(raw_src_dir, d))]
     print(f"  Found {len(subdirs)} data directories: {', '.join(subdirs)}")
     
-    # Copy to Demand Sensing volume ONLY
+    # Copy to Demand Sensing volume/raw/
     vibe_files = copy_directory_recursive(raw_src_dir, vibe_dst_dir)
-    print(f"  ✓ Imported {vibe_files} raw data files to demand_sensing volume")
+    print(f"  ✓ Imported {vibe_files} raw data files to demand_sensing.data.raw")
     
     # Show what was imported
     for subdir in subdirs:
@@ -350,7 +353,7 @@ print(f"Found {len(pdfs)} PDFs")
 # COMMAND ----------
 # Check raw data in volumes
 print("Raw data available in:")
-print(f"  • /Volumes/{catalog}/demand_sensing/data/")
+print(f"  • /Volumes/{catalog}/demand_sensing/data/raw/")
 '''
         
         starter_path = os.path.join(user_workspace, "01_Quick_Start.py")
@@ -415,10 +418,10 @@ print(f"""
   
   -- Create tables from raw data files as needed
   -- Example: CREATE TABLE products USING CSV 
-  -- LOCATION '/Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}/products'
+  -- LOCATION '/Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}/raw/products'
 
 📂 Raw Data Location:
-  Demand Sensing: /Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}/
+  Demand Sensing: /Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}/raw/
   
   Available datasets:
     • competitor_pricing

@@ -51,7 +51,7 @@ pdfs = dbutils.fs.ls("/Volumes/devsecops_labs/agent_bricks_lab/meijer_store_tran
 print(f"Found {len(pdfs)} PDFs")
 
 # List raw data directories in Demand Sensing Lab
-raw_data = dbutils.fs.ls("/Volumes/devsecops_labs/demand_sensing/data")
+raw_data = dbutils.fs.ls("/Volumes/devsecops_labs/demand_sensing/data/raw")
 for folder in raw_data:
     print(f"  • {folder.name}")
 ```
@@ -78,7 +78,7 @@ spark.sql("""
   CREATE TABLE products 
   USING CSV 
   OPTIONS (header 'true', inferSchema 'true')
-  LOCATION '/Volumes/devsecops_labs/demand_sensing/data/products'
+  LOCATION '/Volumes/devsecops_labs/demand_sensing/data/raw/products'
 """)
 ```
 
