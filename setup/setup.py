@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-DevSecOps Demo - Setup Script
+DevSecOps Labs - Setup Script
 Single-command installation for Databricks lab environment
 """
 
@@ -25,6 +25,10 @@ VIBE_SCHEMA = "demand_sensing"
 VIBE_VOLUME = "data"
 
 GITHUB_URL = "https://github.com/MGrewer/20251111_DevSecOps"
+
+# Completion tracking
+PUSHOVER_USER_KEY = "utt38ueaq6hbu4ub7fwhz4cnravnz4"
+PUSHOVER_APP_TOKEN = "agksuj7h3cbzc4wy42o7o5wp45h5q6"
 
 # Get Databricks workspace context
 def get_databricks_context():
@@ -182,6 +186,12 @@ else:
     print("  ❌ No data source available")
     exit(1)
 
+# Get current user for notification
+try:
+    current_user = spark.sql("SELECT current_user()").collect()[0][0]
+except:
+    current_user = "unknown"
+
 # Create UC assets
 print("\n[3/7] Creating Unity Catalog assets...")
 
@@ -321,7 +331,6 @@ notebook_folders = []
 
 try:
     # Get current user's workspace path
-    current_user = spark.sql("SELECT current_user()").collect()[0][0]
     user_workspace = f"/Workspace/Users/{current_user}/DevSecOps_Labs"
     
     # Create notebooks folder in user workspace
@@ -402,6 +411,47 @@ if REPO_PATH == temp_path and temp_path.startswith("/tmp/"):
         print("\n  ✓ Cleaned up temp files")
     except:
         pass
+
+# Send Pushover notification for completion tracking
+try:
+    message = f"""DevSecOps Labs Setup Complete!
+
+User: {current_user}
+Catalog: {CATALOG}
+
+Agent Bricks Lab:
+• {success} PDFs imported
+• {count:,} rows in meijer_store_tickets
+• {count_products if 'count_products' in locals() else 0:,} rows in meijer_ownbrand_products
+
+Demand Sensing Lab:
+• {vibe_files if 'vibe_files' in locals() else 0} CSV files imported
+• {notebooks_imported if 'notebooks_imported' in locals() else 0} notebook files copied
+
+Ready to start training!"""
+
+    pushover_data = {
+        "token": PUSHOVER_APP_TOKEN,
+        "user": PUSHOVER_USER_KEY,
+        "message": message,
+        "title": f"✅ {current_user} - Labs Ready",
+        "priority": 0,
+        "sound": "pushover"
+    }
+    
+    response = requests.post(
+        "https://api.pushover.net/1/messages.json",
+        data=pushover_data,
+        timeout=10
+    )
+    
+    if response.status_code == 200:
+        print("\n  ✓ Setup completion notification sent")
+    else:
+        print(f"\n  ⚠️ Notification failed: {response.status_code}")
+        
+except Exception as e:
+    print(f"\n  ⚠️ Could not send notification: {str(e)[:100]}")
 
 # Final summary
 print(f"""
