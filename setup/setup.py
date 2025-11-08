@@ -163,7 +163,7 @@ git_folder_path = create_git_folder(GITHUB_URL)
 
 # Also clone to /tmp for immediate use (in case Git folder has sync issues)
 print("\n[2/7] Cloning for immediate setup...")
-temp_path = f"/tmp/demo_{int(time.time())}"
+temp_path = f"/tmp/labs_{int(time.time())}"
 import subprocess
 try:
     subprocess.run(["git", "clone", GITHUB_URL, temp_path], check=True, capture_output=True)
@@ -436,20 +436,6 @@ if notebooks_imported > 0:
             print(f"    • {folder}/")
 
 print(f"""
-📝 Try these queries:
-  -- Agent Bricks Lab
-  USE CATALOG {CATALOG};
-  USE SCHEMA {AGENT_SCHEMA};
-  SELECT * FROM {TABLE} LIMIT 10;
-  
-  -- Demand Sensing Lab
-  USE CATALOG {CATALOG};
-  USE SCHEMA {VIBE_SCHEMA};
-  
-  -- Create tables from raw data files as needed
-  -- Example: CREATE TABLE products USING CSV 
-  -- LOCATION '/Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}/raw/products'
-
 📂 Raw Data Location:
   Demand Sensing: /Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}/raw/
   

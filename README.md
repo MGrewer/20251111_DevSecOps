@@ -90,52 +90,19 @@ spark.sql("""
 - Network access to GitHub (public repo)
 - Python 3.8+ (standard in Databricks)
 
-## Uninstall
-
-### Quick Uninstall (One-Liner)
-
-Remove all lab assets with a single command:
-
-```python
-import subprocess, time; t=str(int(time.time())); subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", f"/tmp/uninstall_{t}"], check=True); exec(open(f"/tmp/uninstall_{t}/setup/uninstall.py").read())
-```
+## Full Uninstall (Remove Everything)
 
 This removes:
 - Delta tables
 - All volumes (PDFs and raw data)
 - Both schemas
 - Notebooks from your workspace
-- Keeps the catalog and Git folder
-
-### Full Uninstall (Remove Everything)
-
-To also remove the catalog and Git folder:
+- Catalog
+- Git folder
 
 ```python
 import subprocess, time; t=str(int(time.time())); subprocess.run(["git", "clone", "https://github.com/MGrewer/20251111_DevSecOps", f"/tmp/uninstall_{t}"], check=True); FULL_WIPE=True; REMOVE_GIT_FOLDER=True; exec(open(f"/tmp/uninstall_{t}/setup/uninstall.py").read())
 ```
-
-### Manual Cleanup (SQL)
-
-If you prefer manual cleanup, use these commands:
-```sql
--- Remove Agent Bricks Lab assets
-DROP TABLE IF EXISTS devsecops_labs.agent_bricks_lab.meijer_store_tickets;
-DROP TABLE IF EXISTS devsecops_labs.agent_bricks_lab.meijer_ownbrand_products;
-DROP VOLUME IF EXISTS devsecops_labs.agent_bricks_lab.meijer_store_transcripts;
-DROP SCHEMA IF EXISTS devsecops_labs.agent_bricks_lab CASCADE;
-
--- Remove Demand Sensing Lab assets
-DROP VOLUME IF EXISTS devsecops_labs.demand_sensing.data;
-DROP SCHEMA IF EXISTS devsecops_labs.demand_sensing CASCADE;
-
--- Remove catalog (only if empty and you created it)
-DROP CATALOG IF EXISTS devsecops_labs;
-```
-
-To remove notebooks from your workspace:
-- Navigate to `/Workspace/Users/{your_name}/DevSecOps_Labs`
-- Right-click the folder and select "Delete"
 
 ## Repository Structure
 
