@@ -184,6 +184,7 @@ elif os.path.exists(temp_path):
     print(f"  Using temp clone: {REPO_PATH}")
 else:
     print("  ❌ No data source available")
+    setup_errors.append("CRITICAL: No data source")
     exit(1)
 
 # Get current user for notification
@@ -191,6 +192,9 @@ try:
     current_user = spark.sql("SELECT current_user()").collect()[0][0]
 except:
     current_user = "unknown"
+
+# Track setup errors
+setup_errors = []
 
 # Create UC assets
 print("\n[3/7] Creating Unity Catalog assets...")
@@ -216,6 +220,62 @@ print(f"  ✓ Schema: {CATALOG}.{VIBE_SCHEMA}")
 spark.sql(f"CREATE VOLUME IF NOT EXISTS `{CATALOG}`.`{VIBE_SCHEMA}`.`{VIBE_VOLUME}`")
 print(f"  ✓ Volume: {CATALOG}.{VIBE_SCHEMA}.{VIBE_VOLUME}")
 
+# Create default schema for shared functions
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{CATALOG}`.`default`")
+print(f"  ✓ Schema: {CATALOG}.default")
+
+# Register exercise checkpoint function
+print("  Creating UC function: checkpoint...")
+try:
+    spark.sql("""
+    CREATE OR REPLACE FUNCTION devsecops_labs.default.checkpoint(
+      userid STRING,
+      lab STRING,
+      exercise STRING
+    )
+    RETURNS STRING
+    LANGUAGE PYTHON
+    COMMENT 'Send Pushover notification when exercise checkpoint is reached'
+    AS $$
+import requests
+
+# Pushover configuration
+PUSHOVER_TOKEN = "agksuj7h3cbzc4wy42o7o5wp45h5q6"
+PUSHOVER_USER = "utt38ueaq6hbu4ub7fwhz4cnravnz4"
+
+# Format message and title
+title = f"{lab} - Checkpoint"
+message = f"Exercise: {exercise}\\nUser: {userid}"
+
+# Send Pushover notification
+try:
+    response = requests.post(
+        "https://api.pushover.net/1/messages.json",
+        data={
+            "token": PUSHOVER_TOKEN,
+            "user": PUSHOVER_USER,
+            "message": message,
+            "title": title,
+            "priority": 0
+        },
+        timeout=10
+    )
+    
+    if response.status_code == 200:
+        result = f"Checkpoint: {exercise}"
+    else:
+        result = f"Checkpoint: {exercise} (notification failed: {response.status_code})"
+
+except Exception as e:
+    result = f"Checkpoint: {exercise} (notification error: {str(e)[:50]})"
+
+return result
+$$
+    """)
+    print(f"  ✓ Function: {CATALOG}.default.checkpoint")
+except Exception as e:
+    print(f"  ⚠️ Function creation failed: {str(e)[:100]}")
+
 # Copy PDFs using simple Python file operations
 print("\n[4/7] Importing PDFs...")
 src_dir = f"{REPO_PATH}/data/pdfs"
@@ -238,6 +298,7 @@ if os.path.exists(src_dir):
     print(f"  ✓ Imported {success}/{len(pdf_files)} PDFs")
 else:
     print(f"  ⚠️ No PDFs found at {src_dir}")
+    setup_errors.append("PDF import")
 
 # Copy CSV data files (competitor_pricing, products, sales, stores)
 # These go ONLY to demand_sensing volume, in a raw/ subdirectory
@@ -265,6 +326,7 @@ if os.path.exists(csv_src_dir):
             print(f"    • {subdir}/: {file_count} files")
 else:
     print(f"  ⚠️ No CSV data found at {csv_src_dir}")
+    setup_errors.append("CSV import")
     vibe_files = 0
 
 # Create Delta tables using Volume staging
@@ -292,9 +354,11 @@ try:
         print(f"  ✓ Table created: meijer_store_tickets ({count:,} rows)")
     else:
         print(f"  ⚠️ No parquet files found for meijer_store_tickets")
+        setup_errors.append("meijer_store_tickets parquet files")
         count = 0
 except Exception as e:
     print(f"  ❌ Table meijer_store_tickets failed: {str(e)[:100]}")
+    setup_errors.append("meijer_store_tickets table")
     count = 0
 
 # Table 2: meijer_ownbrand_products
@@ -319,9 +383,11 @@ try:
         print(f"  ✓ Table created: meijer_ownbrand_products ({count_products:,} rows)")
     else:
         print(f"  ⚠️ No parquet files found for meijer_ownbrand_products")
+        setup_errors.append("meijer_ownbrand_products parquet files")
         count_products = 0
 except Exception as e:
     print(f"  ❌ Table meijer_ownbrand_products failed: {str(e)[:100]}")
+    setup_errors.append("meijer_ownbrand_products table")
     count_products = 0
 
 # Import notebooks to user workspace
@@ -412,43 +478,25 @@ if REPO_PATH == temp_path and temp_path.startswith("/tmp/"):
     except:
         pass
 
-# Send Pushover notification for completion tracking
+# Send setup completion/failure notification
 try:
-    message = f"""DevSecOps Labs Setup Complete!
-
-User: {current_user}
-Catalog: {CATALOG}
-
-Agent Bricks Lab:
-• {success} PDFs imported
-• {count:,} rows in meijer_store_tickets
-• {count_products if 'count_products' in locals() else 0:,} rows in meijer_ownbrand_products
-
-Demand Sensing Lab:
-• {vibe_files if 'vibe_files' in locals() else 0} CSV files imported
-• {notebooks_imported if 'notebooks_imported' in locals() else 0} notebook files copied
-
-Ready to start training!"""
-
-    pushover_data = {
-        "token": PUSHOVER_APP_TOKEN,
-        "user": PUSHOVER_USER_KEY,
-        "message": message,
-        "title": f"✅ {current_user} - Labs Ready",
-        "priority": 0,
-        "sound": "pushover"
-    }
-    
-    response = requests.post(
-        "https://api.pushover.net/1/messages.json",
-        data=pushover_data,
-        timeout=10
-    )
-    
-    if response.status_code == 200:
-        print("\n  ✓ Setup completion notification sent")
+    # Determine if setup succeeded or failed
+    if setup_errors:
+        lab_status = "Lab Setup Failed"
+        exercise_details = f"Errors: {', '.join(setup_errors)}"
     else:
-        print(f"\n  ⚠️ Notification failed: {response.status_code}")
+        lab_status = "Lab Setup Complete"
+        exercise_details = f"{success} PDFs, {count:,} tickets, {count_products if 'count_products' in locals() else 0:,} products, {vibe_files if 'vibe_files' in locals() else 0} CSV files, {notebooks_imported if 'notebooks_imported' in locals() else 0} notebooks"
+    
+    result = spark.sql(f"""
+        SELECT devsecops_labs.default.checkpoint(
+            '{current_user}',
+            '{lab_status}',
+            '{exercise_details}'
+        )
+    """).collect()[0][0]
+    
+    print(f"\n  ✓ {result}")
         
 except Exception as e:
     print(f"\n  ⚠️ Could not send notification: {str(e)[:100]}")
