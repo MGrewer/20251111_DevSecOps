@@ -9,6 +9,7 @@ Default behavior:
     devsecops_labs.agent_bricks_lab.meijer_store_transcripts
     devsecops_labs.demand_sensing.data
 - Drop schemas agent_bricks_lab and demand_sensing
+- Drop Lakebase instance margie_app_lakebase
 - Remove notebooks from workspace
 - Leave the catalog in place
 
@@ -31,6 +32,7 @@ DATA_VOLUME = "data"
 
 TABLE_NAME  = "meijer_store_tickets"
 
+LAKEBASE_NAME = "margie_app_lakebase"  # Lakebase instance name
 GIT_REPO_NAME = "20251111_DevSecOps"  # Git folder name
 
 # Behavior toggles (override by passing in globals when exec'ing if desired)
@@ -115,10 +117,33 @@ for schema in (AGENT_SCHEMA, DEMAND_SCHEMA):
         print(f" [WARN] Could not drop schema {CATALOG}.{schema}: {str(e)[:160]}")
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 4) Optional: Full wipe of the catalog
+# 4) Drop Lakebase instance
+# ──────────────────────────────────────────────────────────────────────────────
+divider("4. DROPPING LAKEBASE INSTANCE")
+try:
+    from databricks.sdk import WorkspaceClient
+    
+    w = WorkspaceClient()
+    
+    # Try to get the instance first to see if it exists
+    try:
+        w.database.get_database_instance(name=LAKEBASE_NAME)
+        # Instance exists, delete it
+        w.database.delete_database_instance(name=LAKEBASE_NAME, purge=True)
+        print(f" [OK ] Dropped Lakebase instance: {LAKEBASE_NAME}")
+    except Exception as e:
+        if "not found" in str(e).lower() or "does not exist" in str(e).lower():
+            print(f" [INFO] Lakebase instance not found: {LAKEBASE_NAME}")
+        else:
+            raise
+except Exception as e:
+    print(f" [WARN] Could not drop Lakebase instance {LAKEBASE_NAME}: {str(e)[:160]}")
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 5) Optional: Full wipe of the catalog
 # ──────────────────────────────────────────────────────────────────────────────
 if FULL_WIPE:
-    divider("4. DROPPING CATALOG (FULL WIPE)")
+    divider("5. DROPPING CATALOG (FULL WIPE)")
     try:
         spark.sql(f"DROP CATALOG IF EXISTS {q(CATALOG)} CASCADE")
         print(f" [OK ] Dropped catalog {CATALOG}")
@@ -126,9 +151,9 @@ if FULL_WIPE:
         print(f" [WARN] Could not drop catalog {CATALOG}: {str(e)[:160]}")
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 5) Remove notebooks from workspace
+# 6) Remove notebooks from workspace
 # ──────────────────────────────────────────────────────────────────────────────
-divider("5. REMOVING NOTEBOOKS FROM WORKSPACE")
+divider("6. REMOVING NOTEBOOKS FROM WORKSPACE")
 try:
     import os
     import shutil
@@ -145,10 +170,10 @@ except Exception as e:
     print(f" [WARN] Could not remove notebooks: {str(e)[:160]}")
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 6) Optional: Remove the Databricks Git folder
+# 7) Optional: Remove the Databricks Git folder
 # ──────────────────────────────────────────────────────────────────────────────
 if REMOVE_GIT_FOLDER:
-    divider("6. REMOVING DATABRICKS GIT FOLDER")
+    divider("7. REMOVING DATABRICKS GIT FOLDER")
     try:
         # Context + current user
         ctx = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
@@ -208,6 +233,7 @@ Volumes     : {CATALOG}.{AGENT_SCHEMA}.{PDFS_VOLUME} (dropped)
               {CATALOG}.{DEMAND_SCHEMA}.{DATA_VOLUME} (dropped)
 Tables      : {CATALOG}.{AGENT_SCHEMA}.{TABLE_NAME} (dropped)
               {CATALOG}.{AGENT_SCHEMA}.meijer_ownbrand_products (dropped)
+Lakebase    : {LAKEBASE_NAME} (dropped)
 Notebooks   : /Workspace/Users/<you>/DevSecOps_Labs (removed)
 Git Folder  : {'removed' if REMOVE_GIT_FOLDER else 'retained'}
 
