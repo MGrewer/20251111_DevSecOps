@@ -21,8 +21,14 @@ export function ChatHeader() {
   const { width: windowWidth } = useWindowSize();
 
   return (
-    <header className="sticky top-0 flex items-center gap-2 bg-background px-2 py-1.5 md:px-2">
+    <header className="sticky top-0 flex items-center gap-2 bg-background px-2 py-2 md:px-2">
       <SidebarToggle />
+
+      <img 
+        src="/logo.png" 
+        alt="DevSecOps Labs" 
+        className="absolute left-1/2 h-12 w-auto -translate-x-1/2 transform md:h-14"
+      />
 
       {(!open || windowWidth < 768) && (
         <Button
