@@ -1,6 +1,42 @@
 # DevSecOps Labs - Databricks Training Materials
 
-## One-Line Installation
+## Prerequisites: Free Trial Setup
+
+#### 1. Sign Up for Databricks Free Trial
+
+Visit the signup page with your work email:
+
+[Sign up for Databricks free trial](http://signup.databricks.com/?provider=DB&region=us-west-2&utm_source=direct&utm_medium=hackathon)
+
+- Use your work email address
+- Patiently wait for the verification code email
+- Enter the 6-digit code when prompted
+
+#### 2. Create New Account (if needed)
+
+Even if it shows you already have an account associated with your email, please create a fresh trial by selecting **"Create new account"**.
+
+#### 3. Choose Express Setup
+
+Select **"Express Setup"** to create a pre-configured serverless workspace. This automatically provisions your account and cloud infrastructure.
+
+#### 4. Name Your Account
+
+You can name it anything, but if you plan to revisit this lab, use a recognizable name: **`YourName_2025 DevSecOps`**
+
+**Optional:** Check "Allow anyone from @yourdomain.com to join this account" - This enables an SME from your company to join your workspace for troubleshooting support if needed.
+
+#### 5. Enable Required Preview Features
+
+In the top right corner, navigate to: **User Menu > Previews**
+
+Enable these two preview features:
+1. **Agent Framework: On-Behalf-Of-User Authorization** - Required for AI agents to access Databricks resources using your identity
+2. **Databricks Apps - On-Behalf-Of-User Authorization** - Required for the chatbot application to act on your behalf
+
+Your workspace is now ready for the one-line installation below.
+
+### One-Line Installation
 
 Copy and paste this into any Databricks notebook and click run:
 
