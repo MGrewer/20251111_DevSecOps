@@ -6,11 +6,13 @@
 
 Visit the signup page with your work email:
 
-[Sign up for Databricks free trial](http://signup.databricks.com/?provider=DB&region=us-west-2&utm_source=direct&utm_medium=hackathon)
+[Sign up for a Databricks free trial](http://signup.databricks.com/?provider=DB&region=us-west-2&utm_source=direct&utm_medium=hackathon)
 
 - Use your work email address
 - Patiently wait for the verification code email
 - Enter the 6-digit code when prompted
+
+Note: Agent Bricks is only available in free trials, not the educational Free Edition. No commercial/confidential data should be uploaded to either Free Trials or Free Edition.
 
 #### 2. Create New Account (if needed)
 
