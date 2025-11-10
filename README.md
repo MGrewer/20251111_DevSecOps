@@ -63,15 +63,6 @@ Navigate to: **Workspace > Users > Your Name > DevSecOps_Labs/**
 
 You'll find:
 
-**Agent Bricks Lab**
-
-Build a rag knowledge assistant, natural language query agent, unity catalog function, and a multi-agent supervisor in the context of retail store operations.
-- `-02_agent-bricks-lab/` - Lab notebook and instructions
-  - 01_instructions_agent-bricks-lab
-  - `includes/` - Helper files and utilities
-
-- `chatbot-app` - app template used as an optional excercise in the Agent Bricks lab
-
 **Vibe Coding Assistant (Demand Sensing Lab)**
 
 Focus on code assistance using retail sales and inventory data.
@@ -83,7 +74,14 @@ Focus on code assistance using retail sales and inventory data.
   - Lab notebook 3 [Solution] - Demand Sensing ML with Agent
   - `includes/` - Helper files and utilities
 
+**Agent Bricks Lab**
 
+Build a rag knowledge assistant, natural language query agent, unity catalog function, and a multi-agent supervisor in the context of retail store operations.
+- `-02_agent-bricks-lab/` - Lab notebook and instructions
+  - 01_instructions_agent-bricks-lab
+  - `includes/` - Helper files and utilities
+
+- `chatbot-app` - app template used as an optional excercise in the Agent Bricks lab
 
 ## What Gets Created
 
