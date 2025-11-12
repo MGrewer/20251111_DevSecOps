@@ -206,14 +206,14 @@ try:
 except:
     print(f"  ℹ️ Using existing: {CATALOG}")
 
-# Create Agent Bricks Lab schema (lowercase)
+# Create Agent Bricks Lab schema 
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{CATALOG}`.`{AGENT_SCHEMA}`")
 print(f"  ✓ Schema: {CATALOG}.{AGENT_SCHEMA}")
 
 spark.sql(f"CREATE VOLUME IF NOT EXISTS `{CATALOG}`.`{AGENT_SCHEMA}`.`{VOLUME}`")
 print(f"  ✓ Volume: {CATALOG}.{AGENT_SCHEMA}.{VOLUME}")
 
-# Create Demand Sensing schema (for Vibe Code Assistant Lab)
+# Create Vibe Code Assistant Lab schema 
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{CATALOG}`.`{VIBE_SCHEMA}`")
 print(f"  ✓ Schema: {CATALOG}.{VIBE_SCHEMA}")
 
@@ -317,7 +317,7 @@ if os.path.exists(csv_src_dir):
     subdirs = [d for d in os.listdir(csv_src_dir) if os.path.isdir(os.path.join(csv_src_dir, d))]
     print(f"  Found {len(subdirs)} data directories: {', '.join(subdirs)}")
     
-    # Copy to Demand Sensing volume/raw/
+    # Copy to Vibe volume/raw/
     vibe_files = copy_directory_recursive(csv_src_dir, vibe_dst_dir)
     print(f"  ✓ Imported {vibe_files} CSV files to vibe_code_assistant_lab.data.raw")
     
@@ -392,6 +392,36 @@ except Exception as e:
     print(f"  ❌ Table meijer_ownbrand_products failed: {str(e)[:100]}")
     setup_errors.append("meijer_ownbrand_products table")
     count_products = 0
+
+# Table 3: sales_demand_sensing_gold
+try:
+    # Stage parquet files through Volume
+    vibe_volume_path = f"/Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}"
+    parquet_staging_sales = f"{vibe_volume_path}/.parquet_temp_sales"
+    os.makedirs(parquet_staging_sales, exist_ok=True)
+    
+    parquet_files_sales = glob.glob(f"{REPO_PATH}/data/parquet/sales_demand_sensing_gold/*.parquet")
+    if parquet_files_sales:
+        for pq in parquet_files_sales:
+            shutil.copy(pq, parquet_staging_sales)
+        
+        # Read from Volume path
+        df_sales = spark.read.parquet(f"{parquet_staging_sales}/*.parquet")
+        df_sales.write.mode("overwrite").saveAsTable(f"`{CATALOG}`.`{VIBE_SCHEMA}`.sales_demand_sensing_gold")
+        
+        # Clean up staging
+        shutil.rmtree(parquet_staging_sales, ignore_errors=True)
+        
+        count_sales = spark.table(f"`{CATALOG}`.`{VIBE_SCHEMA}`.sales_demand_sensing_gold").count()
+        print(f"  ✓ Table created: sales_demand_sensing_gold ({count_sales:,} rows)")
+    else:
+        print(f"  ⚠️ No parquet files found for sales_demand_sensing_gold")
+        setup_errors.append("sales_demand_sensing_gold parquet files")
+        count_sales = 0
+except Exception as e:
+    print(f"  ❌ Table sales_demand_sensing_gold failed: {str(e)[:100]}")
+    setup_errors.append("sales_demand_sensing_gold table")
+    count_sales = 0
 
 # Import notebooks to user workspace
 print("\n[7/7] Setting up notebooks...")
@@ -519,11 +549,12 @@ print(f"""
     • {TABLE} ({count:,} rows)
     • meijer_ownbrand_products ({count_products if 'count_products' in locals() else 0:,} rows)
 
-📂 Demand Sensing Lab ({VIBE_SCHEMA}):
+📂 Vibe Code Assistant Lab ({VIBE_SCHEMA}):
   Volume:
     • {VIBE_VOLUME} ({vibe_files if 'vibe_files' in locals() else 0} raw data files)
   Tables:
-    • Tables will be created during lab exercises
+    • sales_demand_sensing_gold ({count_sales if 'count_sales' in locals() else 0:,} rows)
+    • Additional tables will be created during lab exercises
 """)
 
 if notebooks_imported > 0:
@@ -538,7 +569,7 @@ if notebooks_imported > 0:
 
 print(f"""
 📂 Raw Data Location:
-  Demand Sensing: /Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}/raw/
+  Vibe Coding Assistant Lab: /Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}/raw/
   
   Available datasets:
     • competitor_pricing

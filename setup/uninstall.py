@@ -25,19 +25,21 @@ import sys
 # ──────────────────────────────────────────────────────────────────────────────
 CATALOG       = "devsecops_labs"
 AGENT_SCHEMA  = "agent_bricks_lab"
-DEMAND_SCHEMA = "demand_sensing"
+VIBE_SCHEMA = "vibe_code_assistant_lab"
 
 PDFS_VOLUME = "meijer_store_transcripts"
 DATA_VOLUME = "data"
 
-TABLE_NAME  = "meijer_store_tickets"
+TABLE_TICKETS  = "meijer_store_tickets"
+TABLE_PRODUCTS  = "meijer_ownbrand_products"
+TABLE_SALES  = "sales_demand_sensing_gold"
 
 LAKEBASE_NAME = "margie_app_lakebase"  # Lakebase instance name
 GIT_REPO_NAME = "20251111_DevSecOps"  # Git folder name
 
 # Behavior toggles (override by passing in globals when exec'ing if desired)
-FULL_WIPE        = globals().get("FULL_WIPE", False)         # True → drop catalog CASCADE
-REMOVE_GIT_FOLDER = globals().get("REMOVE_GIT_FOLDER", False) # True → delete the Git folder
+FULL_WIPE        = globals().get("FULL_WIPE", True)         # True → drop catalog CASCADE
+REMOVE_GIT_FOLDER = globals().get("REMOVE_GIT_FOLDER", True) # True → delete the Git folder
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Banner
@@ -62,7 +64,7 @@ def divider(title: str):
 
 # Paths
 pdfs_vol_fs = f"/Volumes/{CATALOG}/{AGENT_SCHEMA}/{PDFS_VOLUME}"
-data_vol_fs = f"/Volumes/{CATALOG}/{DEMAND_SCHEMA}/{DATA_VOLUME}"
+data_vol_fs = f"/Volumes/{CATALOG}/{VIBE_SCHEMA}/{DATA_VOLUME}"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 1) Drop tables
@@ -70,20 +72,28 @@ data_vol_fs = f"/Volumes/{CATALOG}/{DEMAND_SCHEMA}/{DATA_VOLUME}"
 divider("1. DROPPING TABLES")
 
 # Drop meijer_store_tickets
-full_table = f"{q(CATALOG)}.{q(AGENT_SCHEMA)}.{q(TABLE_NAME)}"
+tickets_table = f"{q(CATALOG)}.{q(AGENT_SCHEMA)}.{q(TABLE_TICKETS)}"
 try:
     spark.sql(f"DROP TABLE IF EXISTS {full_table}")
-    print(f" [OK ] Dropped table {CATALOG}.{AGENT_SCHEMA}.{TABLE_NAME}")
+    print(f" [OK ] Dropped table {CATALOG}.{AGENT_SCHEMA}.{TABLE_TICKETS}")
 except Exception as e:
-    print(f" [WARN] Could not drop table {CATALOG}.{AGENT_SCHEMA}.{TABLE_NAME}: {str(e)[:160]}")
+    print(f" [WARN] Could not drop table {CATALOG}.{AGENT_SCHEMA}.{TABLE_TICKETS}: {str(e)[:160]}")
 
 # Drop meijer_ownbrand_products
-products_table = f"{q(CATALOG)}.{q(AGENT_SCHEMA)}.meijer_ownbrand_products"
+products_table = f"{q(CATALOG)}.{q(AGENT_SCHEMA)}.{q(TABLE_PRODUCTS)}"
 try:
     spark.sql(f"DROP TABLE IF EXISTS {products_table}")
-    print(f" [OK ] Dropped table {CATALOG}.{AGENT_SCHEMA}.meijer_ownbrand_products")
+    print(f" [OK ] Dropped table {CATALOG}.{AGENT_SCHEMA}.{TABLE_PRODUCTS}")
 except Exception as e:
-    print(f" [WARN] Could not drop table {CATALOG}.{AGENT_SCHEMA}.meijer_ownbrand_products: {str(e)[:160]}")
+    print(f" [WARN] Could not drop table {CATALOG}.{AGENT_SCHEMA}.{TABLE_PRODUCTS}: {str(e)[:160]}")
+
+# Drop sales_demand_sensing_gold
+sales_table = f"{q(CATALOG)}.{q(VIBE_SCHEMA)}.{q(TABLE_SALES)}"
+try:
+    spark.sql(f"DROP TABLE IF EXISTS {products_table}")
+    print(f" [OK ] Dropped table {CATALOG}.{VIBE_SCHEMA}.{TABLE_SALES}")
+except Exception as e:
+    print(f" [WARN] Could not drop table {CATALOG}.{VIBE_SCHEMA}.{TABLE_SALES}: {str(e)[:160]}")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 2) Drop volumes (with retry after clearing contents)
@@ -91,7 +101,7 @@ except Exception as e:
 divider("2. DROPPING VOLUMES")
 for schema, vol, fs_path in [
     (AGENT_SCHEMA, PDFS_VOLUME, pdfs_vol_fs),
-    (DEMAND_SCHEMA, DATA_VOLUME, data_vol_fs),
+    (VIBE_SCHEMA, DATA_VOLUME, data_vol_fs),
 ]:
     try:
         spark.sql(f"DROP VOLUME IF EXISTS {q(CATALOG)}.{q(schema)}.{q(vol)}")
@@ -109,7 +119,7 @@ for schema, vol, fs_path in [
 # 3) Drop schemas
 # ──────────────────────────────────────────────────────────────────────────────
 divider("3. DROPPING SCHEMAS")
-for schema in (AGENT_SCHEMA, DEMAND_SCHEMA):
+for schema in (AGENT_SCHEMA, VIBE_SCHEMA):
     try:
         spark.sql(f"DROP SCHEMA IF EXISTS {q(CATALOG)}.{q(schema)} CASCADE")
         print(f" [OK ] Dropped schema {CATALOG}.{schema}")
@@ -228,11 +238,12 @@ print(f"""
 ╚════════════════════════════════════════════════════════════════════╝
 
 Catalog     : {CATALOG}{' (dropped)' if FULL_WIPE else ' (retained)'}
-Schemas     : {AGENT_SCHEMA} (dropped), {DEMAND_SCHEMA} (dropped)
+Schemas     : {AGENT_SCHEMA} (dropped), {VIBE_SCHEMA} (dropped)
 Volumes     : {CATALOG}.{AGENT_SCHEMA}.{PDFS_VOLUME} (dropped)
-              {CATALOG}.{DEMAND_SCHEMA}.{DATA_VOLUME} (dropped)
-Tables      : {CATALOG}.{AGENT_SCHEMA}.{TABLE_NAME} (dropped)
-              {CATALOG}.{AGENT_SCHEMA}.meijer_ownbrand_products (dropped)
+              {CATALOG}.{VIBE_SCHEMA}.{DATA_VOLUME} (dropped)
+Tables      : {CATALOG}.{AGENT_SCHEMA}.{TABLE_TICKETS} (dropped)
+              {CATALOG}.{AGENT_SCHEMA}.{TABLE_PRODUCTS} (dropped)
+              {CATALOG}.{VIBE_SCHEMA}.{TABLE_SALES} (dropped)
 Lakebase    : {LAKEBASE_NAME} (dropped)
 Notebooks   : /Workspace/Users/<you>/DevSecOps_Labs (removed)
 Git Folder  : {'removed' if REMOVE_GIT_FOLDER else 'retained'}
