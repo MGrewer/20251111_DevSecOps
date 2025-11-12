@@ -38,8 +38,8 @@ LAKEBASE_NAME = "margie_app_lakebase"  # Lakebase instance name
 GIT_REPO_NAME = "20251111_DevSecOps"  # Git folder name
 
 # Behavior toggles (override by passing in globals when exec'ing if desired)
-FULL_WIPE        = globals().get("FULL_WIPE", True)         # True → drop catalog CASCADE
-REMOVE_GIT_FOLDER = globals().get("REMOVE_GIT_FOLDER", True) # True → delete the Git folder
+FULL_WIPE        = globals().get("FULL_WIPE", False)         # True → drop catalog CASCADE
+REMOVE_GIT_FOLDER = globals().get("REMOVE_GIT_FOLDER", False) # True → delete the Git folder
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Banner
@@ -74,7 +74,7 @@ divider("1. DROPPING TABLES")
 # Drop meijer_store_tickets
 tickets_table = f"{q(CATALOG)}.{q(AGENT_SCHEMA)}.{q(TABLE_TICKETS)}"
 try:
-    spark.sql(f"DROP TABLE IF EXISTS {full_table}")
+    spark.sql(f"DROP TABLE IF EXISTS {tickets_table}")
     print(f" [OK ] Dropped table {CATALOG}.{AGENT_SCHEMA}.{TABLE_TICKETS}")
 except Exception as e:
     print(f" [WARN] Could not drop table {CATALOG}.{AGENT_SCHEMA}.{TABLE_TICKETS}: {str(e)[:160]}")
@@ -90,7 +90,7 @@ except Exception as e:
 # Drop sales_demand_sensing_gold
 sales_table = f"{q(CATALOG)}.{q(VIBE_SCHEMA)}.{q(TABLE_SALES)}"
 try:
-    spark.sql(f"DROP TABLE IF EXISTS {products_table}")
+    spark.sql(f"DROP TABLE IF EXISTS {sales_table}")
     print(f" [OK ] Dropped table {CATALOG}.{VIBE_SCHEMA}.{TABLE_SALES}")
 except Exception as e:
     print(f" [WARN] Could not drop table {CATALOG}.{VIBE_SCHEMA}.{TABLE_SALES}: {str(e)[:160]}")

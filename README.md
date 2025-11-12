@@ -85,18 +85,19 @@ Build a rag knowledge assistant, natural language query agent, unity catalog fun
 
 ## What Gets Created
 
+### Vibe Coding Assistant Lab
+- `devsecops_labs.vibe_code_assistant_lab` - Schema
+- `data` - Volume with raw CSV data (competitor_pricing, products, sales, stores)
+- `sales_demand_sensing_gold` - Delta table (pre-created)
+- Lab notebooks in your workspace
+- Additional tables will be created during lab exercises
+
 ### Agent Bricks Lab
 - `devsecops_labs.agent_bricks_lab` - Schema
 - `meijer_store_transcripts` - Volume with PDF transcripts
 - `meijer_store_tickets` - Delta table
 - `meijer_ownbrand_products` - Delta table
-- Lab notebook in your workspoace
-
-### Demand Sensing Lab (Vibe Code Assistant)
-- `devsecops_labs.demand_sensing` - Schema
-- `data` - Volume with raw CSV data (competitor_pricing, products, sales, stores)
-- Lab notebooks in your workspace
-
+- Lab notebook in your workspace
 ## Requirements
 
 - Databricks workspace with Unity Catalog enabled

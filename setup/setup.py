@@ -519,7 +519,7 @@ try:
         checkpoint_message = f"Errors: {', '.join(setup_errors)}"
     else:
         checkpoint_name = "Lab Setup Complete"
-        checkpoint_message = f"Success! Imported {success} PDFs, {count:,} tickets, {count_products if 'count_products' in locals() else 0:,} products, {vibe_files if 'vibe_files' in locals() else 0} CSV files, {notebooks_imported if 'notebooks_imported' in locals() else 0} notebook files"
+        checkpoint_message = f"Success! Imported {success} PDFs, {count:,} tickets, {count_products if 'count_products' in locals() else 0:,} products, {count_sales if 'count_sales' in locals() else 0:,} sales records, {vibe_files if 'vibe_files' in locals() else 0} CSV files, {notebooks_imported if 'notebooks_imported' in locals() else 0} notebook files"
     
     result = spark.sql(f"""
         SELECT devsecops_labs.default.checkpoint(
