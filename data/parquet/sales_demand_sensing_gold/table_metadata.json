@@ -1,0 +1,11 @@
+{
+  "source_catalog": "lp_dev",
+  "source_schema": "vibe_code_assistant_lab",
+  "source_table": "sales_demand_sensing_gold",
+  "row_count": 14303847,
+  "column_count": 28,
+  "parquet_files": 15,
+  "total_size_mb": 282.44603538513184,
+  "compression": "snappy",
+  "export_timestamp": "2025-11-12 04:40:41"
+}

@@ -21,7 +21,7 @@ VOLUME = "meijer_store_transcripts"
 TABLE = "meijer_store_tickets"
 
 # Vibe Code Assistant Lab (Demand Sensing)
-VIBE_SCHEMA = "demand_sensing"
+VIBE_SCHEMA = "vibe_code_assistant_lab"
 VIBE_VOLUME = "data"
 
 GITHUB_URL = "https://github.com/MGrewer/20251111_DevSecOps"
@@ -304,8 +304,8 @@ else:
     setup_errors.append("PDF import")
 
 # Copy CSV data files (competitor_pricing, products, sales, stores)
-# These go ONLY to demand_sensing volume, in a raw/ subdirectory
-print("\n[5/7] Importing CSV data files to demand_sensing...")
+# These go ONLY to vibe_code_assistant_lab volume, in a raw/ subdirectory
+print("\n[5/7] Importing CSV data files to vibe_code_assistant_lab...")
 csv_src_dir = f"{REPO_PATH}/data/csv"
 vibe_dst_dir = f"/Volumes/{CATALOG}/{VIBE_SCHEMA}/{VIBE_VOLUME}/raw"
 
@@ -319,7 +319,7 @@ if os.path.exists(csv_src_dir):
     
     # Copy to Demand Sensing volume/raw/
     vibe_files = copy_directory_recursive(csv_src_dir, vibe_dst_dir)
-    print(f"  ✓ Imported {vibe_files} CSV files to demand_sensing.data.raw")
+    print(f"  ✓ Imported {vibe_files} CSV files to vibe_code_assistant_lab.data.raw")
     
     # Show what was imported
     for subdir in subdirs:
@@ -460,7 +460,7 @@ print(f"Found {len(pdfs)} PDFs")
 # COMMAND ----------
 # Check raw data in volumes
 print("Raw data available in:")
-print(f"  • /Volumes/{catalog}/demand_sensing/data/raw/")
+print(f"  • /Volumes/{catalog}/vibe_code_assistant_lab/data/raw/")
 '''
         
         starter_path = os.path.join(user_workspace, "01_Quick_Start.py")

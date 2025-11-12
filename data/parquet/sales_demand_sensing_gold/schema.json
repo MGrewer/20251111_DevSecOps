@@ -1,0 +1,142 @@
+[
+  {
+    "name": "transaction_id",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "line_number",
+    "type": "IntegerType()",
+    "nullable": true
+  },
+  {
+    "name": "store_id",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "product_id",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "quantity",
+    "type": "IntegerType()",
+    "nullable": true
+  },
+  {
+    "name": "unit_price",
+    "type": "DoubleType()",
+    "nullable": true
+  },
+  {
+    "name": "discount",
+    "type": "DoubleType()",
+    "nullable": true
+  },
+  {
+    "name": "total_amount",
+    "type": "DoubleType()",
+    "nullable": true
+  },
+  {
+    "name": "payment_type",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "channel",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "loyalty_id",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "transaction_ts",
+    "type": "TimestampType()",
+    "nullable": true
+  },
+  {
+    "name": "event_date",
+    "type": "DateType()",
+    "nullable": true
+  },
+  {
+    "name": "sku",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "product_name",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "category",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "brand",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "base_price",
+    "type": "DoubleType()",
+    "nullable": true
+  },
+  {
+    "name": "product_unit",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "store_name",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "store_manager_id",
+    "type": "LongType()",
+    "nullable": true
+  },
+  {
+    "name": "address",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "store_city",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "store_state",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "competitor",
+    "type": "StringType()",
+    "nullable": true
+  },
+  {
+    "name": "competitor_price",
+    "type": "DoubleType()",
+    "nullable": true
+  },
+  {
+    "name": "competitor_scrape_ts",
+    "type": "TimestampType()",
+    "nullable": true
+  },
+  {
+    "name": "competitor_event_date",
+    "type": "DateType()",
+    "nullable": true
+  }
+]
